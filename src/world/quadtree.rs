@@ -22,24 +22,21 @@ impl Node {
     }
 
     pub fn query(&self, bounds: &AABB) -> Vec<(Index, AABB)> {
-        let mut out: Vec<(Index, AABB)> = vec![];
-
+        let mut out: Vec<(Index, AABB)> = Vec::with_capacity(self.elements.len());
+        self.query_recursive(bounds, &mut out);
+        out
+    }
+    
+    fn query_recursive(&self, bounds: &AABB, out: &mut Vec<(Index, AABB)>) {
         if bounds.overlaps_aabb(&self.bounds) {
             out.extend(&self.elements);
-            // for el in &self.elements {
-            //     if bounds.overlaps_aabb(&el.1) {
-            //         out.push(*el)
-            //     }
-            // }
-        }
-
-        for child in &self.children {
-            if let Some(child_node) = child {
-                out.extend(&child_node.query(bounds));
+    
+            for child in &self.children {
+                if let Some(child_node) = child {
+                    child_node.query_recursive(bounds, out);
+                }
             }
         }
-
-        out
     }
 
     pub fn insert(&mut self, data: Index, bounds: &AABB, (depth, max_depth): (u8, u8)) {
