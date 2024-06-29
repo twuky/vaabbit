@@ -25,11 +25,12 @@ impl Node {
         let mut out: Vec<(Index, AABB)> = vec![];
 
         if bounds.overlaps_aabb(&self.bounds) {
-            for el in &self.elements {
-                if bounds.overlaps_aabb(&el.1) {
-                    out.push(*el)
-                }
-            }
+            out.extend(&self.elements);
+            // for el in &self.elements {
+            //     if bounds.overlaps_aabb(&el.1) {
+            //         out.push(*el)
+            //     }
+            // }
         }
 
         for child in &self.children {

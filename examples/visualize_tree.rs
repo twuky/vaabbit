@@ -29,17 +29,22 @@ async fn main() {
         x -= 25.0;
         y -= 25.0;
 
-        
-        let t = Instant::now();
-        let overlaps = tree.root.query(&AABB {
+        let test = AABB {
             pos: Vec2::new(x, y) + Vec2::new(-100.0, -100.0),
             size: Vec2::new(50.0, 50.0)
-        });
+        };
+        
+        let t = Instant::now();
+        let overlaps = tree.root.query(&test);
         let dur = Instant::now() - t;
         draw_text(&format!("fps: {}, q time: {}", get_fps(), dur.as_secs_f64() * 1000.0), 4.0, 24.0, 24.0, WHITE);
 
+        
         for item in overlaps {
-            draw_aabb(item.1, WHITE)
+            draw_aabb(item.1, WHITE);
+            if item.1.overlaps_aabb(&test) {
+                draw_aabb(item.1, RED)
+            }
         }
 
         draw_rectangle_lines(x, y, 50.0, 50.0, 1.0, YELLOW);
