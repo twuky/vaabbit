@@ -12,7 +12,7 @@ async fn main() {
     rand::srand(8694);
     let mut tree = QuadTree::<u32>::new(600.0, 600.0, 128);
 
-    for i in 0..50000 {
+    for i in 0..5000 {
         let rect = AABB {
             pos: Vec2::new(300.0, 300.0) + Vec2::new(rand::gen_range(-280.0, 280.0), rand::gen_range(-280.0, 280.0)),
             size: Vec2::new(rand::gen_range(5.0, 30.0), rand::gen_range(5.0, 30.0))
