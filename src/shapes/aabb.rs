@@ -8,11 +8,16 @@ pub struct AABB {
 }
 
 impl AABB {
-    pub fn overlaps_aabb(&self, other: AABB) -> bool {
-        self.pos.x < other.pos.x + other.size.x &&
-        self.pos.x + self.size.x > other.pos.x &&
-        self.pos.y < other.pos.y + other.size.y &&
-        self.pos.y + self.size.y > other.pos.y
+    pub fn overlaps_aabb(&self, other: &AABB) -> bool {
+        let self_right = self.pos.x + self.size.x;
+        let self_top = self.pos.y + self.size.y;
+        let other_right = other.pos.x + other.size.x;
+        let other_top = other.pos.y + other.size.y;
+
+        self.pos.x < other_right &&
+        self_right > other.pos.x &&
+        self.pos.y < other_top &&
+        self_top > other.pos.y
     }
 
     pub fn area(&self) -> f32 {

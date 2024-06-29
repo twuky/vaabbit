@@ -55,7 +55,7 @@ pub trait Shape {
     }
 
     fn bounds_overlaps_bounds(&self, other: impl Shape) -> bool {
-        self.bounds().overlaps_aabb(other.bounds())
+        self.bounds().overlaps_aabb(&other.bounds())
     }
 
     fn overlaps<T: Shape>(&self, other: &T) -> bool {
