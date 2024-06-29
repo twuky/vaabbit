@@ -246,6 +246,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulz-arena"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67e6caa222a0aff05f2be5e49d91420320cfae8ee04e4129edb3c235779f6e45"
+
+[[package]]
 name = "quad-rand"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -304,6 +310,7 @@ version = "0.1.0"
 dependencies = [
  "glam 0.28.0",
  "macroquad",
+ "pulz-arena",
 ]
 
 [[package]]

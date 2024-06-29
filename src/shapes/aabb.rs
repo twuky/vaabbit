@@ -18,6 +18,31 @@ impl AABB {
     pub fn area(&self) -> f32 {
         self.size.element_product()
     }
+
+    pub fn is_within_aabb(&self, other: &AABB) -> bool {
+        other.overlaps_point(self.pos) &&
+        other.overlaps_point(self.pos + self.size)
+    }
+
+    pub fn center(&self) -> Vec2 {
+        self.pos + self.size / 2.0
+    }
+
+    pub fn bottom_left(&self) -> Vec2 {
+        self.pos
+    }
+
+    pub fn bottom_right(&self) -> Vec2 {
+        self.pos + vec2(self.size.x, 0.0)
+    }
+
+    pub fn top_left(&self) -> Vec2 {
+        self.pos + vec2(0.0, self.size.y)
+    }
+
+    pub fn top_right(&self) -> Vec2 {
+        self.pos + self.size
+    }
 }
 
 impl Shape for AABB {

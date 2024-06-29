@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 glam = "*"
+pulz-arena = "*"
 
 [dev-dependencies]
 macroquad = "*"
