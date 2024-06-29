@@ -7,7 +7,7 @@ use macroquad::{color, prelude::*};
 async fn main() {
     set_window_size(800, 800);
     rand::srand(4);
-    let mut tree = QuadTree::<u8>::new(450.0, 450.0, 6);
+    let mut tree = QuadTree::<u8>::new(400.0, 400.0, 5);
 
     for i in 0..80 {
         let rect = AABB {

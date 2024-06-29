@@ -58,16 +58,13 @@ impl<T> Node<T> {
     }
 
     pub fn insert(&mut self, data: T, bounds: &AABB, (depth, max_depth): (u8, u8)) {
-        // if at max depth or tree empty, add to self
-        if depth == max_depth
-            || self.elements.len() <= max_depth as usize
-        {
+        // all else
+        if bounds.bounds_overlaps_bounds(self.bounds) && !bounds.is_within_aabb(&self.bounds) {
             self.elements.push((data, *bounds));
-
             if self.elements.len() > max_depth as usize {
                 self.rebalance((depth, max_depth));
             }
-            return;
+            return
         }
 
         // otherwise, add to children
@@ -99,13 +96,12 @@ impl<T> Node<T> {
             }
         }
 
-        // all else
-        if bounds.bounds_overlaps_bounds(self.bounds) && !bounds.is_within_aabb(&self.bounds) {
-            self.elements.push((data, *bounds));
-            if self.elements.len() > max_depth as usize {
-                self.rebalance((depth, max_depth));
-            }
+        self.elements.push((data, *bounds));
+
+        if self.elements.len() > max_depth as usize {
+            self.rebalance((depth, max_depth));
         }
+        return;
     }
 
     pub fn rebalance(&mut self, (depth, max_depth): (u8, u8)) {
