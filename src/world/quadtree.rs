@@ -6,18 +6,15 @@ use crate::shapes::{self, Shape, AABB};
 pub struct Node {
     pub bounds: AABB,                      // 16 bytes
     pub elements: Vec<(Index, AABB)>,      // 24 bytes
-    depth: u8,                             // 1 byte
-    // 3 bytes padding to align the next field
-    pub children: [Option<Box<Node>>; 4],  // 4 * 8 bytes = 32 bytes
+    pub children: Option<[Box<Node>; 4]>,  // 4 * 8 bytes = 32 bytes
 }
 
 impl Node {
-    pub fn new(bounds: AABB, depth: u8) -> Self {
+    pub fn new(bounds: AABB, _depth: u8) -> Self {
         Self {
             bounds,
             elements: Vec::new(),
-            depth,
-            children: [None, None, None, None],
+            children: None,
         }
     }
 
@@ -29,11 +26,15 @@ impl Node {
     
     fn query_recursive(&self, bounds: &AABB, out: &mut Vec<(Index, AABB)>) {
         if bounds.overlaps_aabb(&self.bounds) {
-            out.extend(&self.elements);
-    
-            for child in &self.children {
-                if let Some(child_node) = child {
-                    child_node.query_recursive(bounds, out);
+            for el in &self.elements {
+                if bounds.overlaps_aabb(&el.1) {
+                    out.push(el.clone());
+                }   
+            }
+
+            if let Some(children) = &self.children {
+                for child in children {
+                    child.query_recursive(bounds, out);
                 }
             }
         }
@@ -48,10 +49,10 @@ impl Node {
             return;
         }
 
-        for child in &mut self.children {
-            if let Some(child_node) = child {
-                if bounds.is_within_aabb(&child_node.bounds) {
-                    child_node.insert(data, bounds, (depth + 1, max_depth));
+        if let Some(children) = &mut self.children {
+            for child in children {
+                if bounds.is_within_aabb(&child.bounds) {
+                    child.insert(data, bounds, (depth + 1, max_depth));
                     return;
                 }
             }
@@ -71,13 +72,16 @@ impl Node {
             Box::new(Node::new(AABB { pos, size }, d))
         };
 
-        match self.children[0] {
+        
+        match self.children {
             Some(_) => {},
             None => {
-                self.children[0] = Some(create_child(vec2(self.bounds.pos.x, self.bounds.pos.y + size.y)));
-                self.children[1] = Some(create_child(self.bounds.center()));
-                self.children[2] = Some(create_child(self.bounds.bottom_left()));
-                self.children[3] = Some(create_child(vec2(self.bounds.pos.x + size.x, self.bounds.pos.y)));
+                self.children = Some([
+                    create_child(vec2(self.bounds.pos.x, self.bounds.pos.y + size.y)),
+                    create_child(self.bounds.center()),
+                    create_child(self.bounds.bottom_left()),
+                    create_child(vec2(self.bounds.pos.x + size.x, self.bounds.pos.y)),
+                ]);
             },
         }
 
@@ -85,10 +89,10 @@ impl Node {
 
         for el in to_replace {
             let mut inserted = false;
-            for child in &mut self.children {
-                if let Some(child_node) = child {
-                    if el.1.is_within_aabb(&child_node.bounds) {
-                        child_node.insert(el.0, &el.1, (d, max_depth));
+            if let Some(children) = &mut self.children {
+                for child in children {
+                    if el.1.is_within_aabb(&child.bounds) {
+                        child.insert(el.0, &el.1, (d, max_depth));
                         inserted = true;
                         break;
                     }

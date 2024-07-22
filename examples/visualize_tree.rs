@@ -62,9 +62,9 @@ fn draw_node(node: &Node) {
         draw_aabb(e.1, c)
     }
 
-    for i in &node.children {
-        if let Some(quadrant) = i {
-            draw_node(&quadrant)
+    if let Some(children) = &node.children {
+        for i in children {
+            draw_node(&i)
         }
     }
 }
