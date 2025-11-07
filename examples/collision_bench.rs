@@ -46,7 +46,7 @@ fn main() {
 
     let offset = vibbit::Vec2::new(-640.0, -360.0);
 
-    for _ in 0..100 {
+    for _ in 0..300 {
         let id = world.add_actor(Rect::new());
         bunnies += 1;
         world.set_pos(&id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));

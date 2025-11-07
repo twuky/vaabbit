@@ -190,7 +190,7 @@ impl World {
         }
     }
 
-    pub fn debug_get_tree(&self) -> Vec<(usize, AABBI32)> {
+    pub fn debug_get_tree(&self) -> Vec<(usize, AABB)> {
         self.physics.get_debug_info()
     }
 

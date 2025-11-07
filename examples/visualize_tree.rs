@@ -37,15 +37,15 @@ async fn main() {
         
         let t = Instant::now();
         let mut overlaps = SmallVec::new();
-        tree.root.query(&test.as_aabbi32(), &mut overlaps);
+        tree.root.query(&test, &mut overlaps);
         let dur = Instant::now() - t;
         draw_text(&format!("fps: {}, q time: {}", get_fps(), dur.as_secs_f64() * 1000.0), 4.0, 24.0, 24.0, WHITE);
 
         
         for item in overlaps {
-            draw_aabb(item.1.as_aabb(), WHITE);
-            if item.1.overlaps_aabb(&test.as_aabbi32()) {
-                draw_aabb(item.1.as_aabb(), RED)
+            draw_aabb(item.1, WHITE);
+            if item.1.overlaps_aabb(&test) {
+                draw_aabb(item.1, RED)
             }
         }
 
@@ -57,11 +57,11 @@ async fn main() {
 
 fn draw_node<T>(node: &Node<T>) {
     let c = Color::new(rand::gen_range(0.0, 1.0), rand::gen_range(0.0, 1.0), rand::gen_range(0.0, 1.0), 1.0);
-    draw_aabb(node.bounds.as_aabb(), c);
-    draw_text(&node.elements.len().to_string(), 100. + node.bounds.center().x as f32, 100. + node.bounds.center().y as f32, 16.0, c);
+    draw_aabb(node.bounds, c);
+    draw_text(&node.elements.len().to_string(), 100. + node.bounds.center().x, 100. + node.bounds.center().y, 16.0, c);
 
     for e in &node.elements {
-        draw_aabb(e.1.as_aabb(), c)
+        draw_aabb(e.1, c)
     }
 
     if let Some(children) = &node.children {

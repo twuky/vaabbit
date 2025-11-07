@@ -4,7 +4,7 @@ use anymap::AnyMap;
 use glam::Vec2;
 use pulz_arena::{Arena, Index, Mirror};
 use smallvec::SmallVec;
-use crate::{physics::{self, HasBounds, quadtree::QuadTree}, shapes::{AABB, AABBI32, CollisionShape}, world::ID};
+use crate::{physics::{self, quadtree::QuadTree, HasBounds}, shapes::{CollisionShape, AABB}, world::ID};
 
 pub(crate) struct PhysicsData {
     pub pos: Vec2,
@@ -139,7 +139,7 @@ impl Physics {
 
     pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 8]>) {
         let mut q = smallvec::SmallVec::new();
-        self.tree.root.query(&bounds.as_aabbi32(), &mut q);
+        self.tree.root.query(bounds, &mut q);
 
         for (idx, _aabb) in &q {
             // if self.to_delete.contains(idx) {
@@ -154,7 +154,7 @@ impl Physics {
         }
     }
 
-    pub fn get_debug_info(&self) -> Vec<(usize, AABBI32)> {
+    pub fn get_debug_info(&self) -> Vec<(usize, AABB)> {
         self.tree.get_debug_info()
     }
 }

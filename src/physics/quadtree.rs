@@ -1,15 +1,15 @@
-use glam::{Vec2, i16vec2, ivec2, vec2};
+use glam::{vec2, Vec2};
 use smallvec::{smallvec, SmallVec};
-use crate::shapes::{self, AABB, AABBI32};
+use crate::shapes::{self, AABB};
 
 pub struct Node<T> {
-    pub bounds: AABBI32,                      // 16 bytes
-    pub elements: SmallVec<[(T, AABBI32); 16]>,      // 24 bytes
+    pub bounds: AABB,                      // 16 bytes
+    pub elements: SmallVec<[(T, AABB); 128]>,      // 24 bytes
     pub children: Option<[Box<Node<T>>; 4]>,  // 4 * 8 bytes = 32 bytes
 }
 
 impl<T> Node<T> where T: Clone {
-    pub fn new(bounds: AABBI32, _depth: u8) -> Self {
+    pub fn new(bounds: AABB, _depth: u8) -> Self {
         Self {
             bounds,
             elements: SmallVec::new(),
@@ -17,7 +17,7 @@ impl<T> Node<T> where T: Clone {
         }
     }
 
-    pub fn get_debug_info(&self, out: &mut Vec<(usize, AABBI32)>) {
+    pub fn get_debug_info(&self, out: &mut Vec<(usize, AABB)>) {
         match &self.children {
             Some(children) => {
                 for child in children {
@@ -31,20 +31,19 @@ impl<T> Node<T> where T: Clone {
     }
 
 
-    pub fn query<'a>(&'a self, bounds: &AABBI32, out: &mut SmallVec<[&'a (T, AABBI32); 8]>) {
+    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 8]>) {
         self.query_recursive(bounds, out);
         // outmost layer may contain items that are outside of the bounds
         if !bounds.overlaps_aabb(&self.bounds) {
-
-            self.elements.iter().for_each(|el| {
+            for el in &self.elements {
                 if bounds.overlaps_aabb(&el.1) {
                     out.push(el);
                 }   
-            });
+            }
         }
     }
     
-    fn query_recursive<'a>(&'a self, bounds: &AABBI32, out: &mut SmallVec<[&'a (T, AABBI32); 8]>) {
+    fn query_recursive<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 8]>) {
         match &self.children {
             Some(children) => {
                 for child in children {
@@ -65,7 +64,7 @@ impl<T> Node<T> where T: Clone {
         }
     }
 
-    pub fn insert(&mut self, data: &T, bounds: &AABBI32, (depth, max_depth): (u8, u8), should_rebalance: bool) {
+    pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         match &mut self.children {
             Some(children) => {
                 for child in children {
@@ -86,10 +85,10 @@ impl<T> Node<T> where T: Clone {
 
     pub fn rebalance(&mut self, (depth, max_depth): (u8, u8)) {
         let d = depth + 1;
-        let size = self.bounds.size() / 2;
+        let size = self.bounds.size() / 2.0;
 
         let create_child = |pos| {
-            Box::new(Node::new(AABBI32 { min: pos, max: pos + size }, d))
+            Box::new(Node::new(AABB { min: pos, max: pos + size }, d))
         };
 
         
@@ -97,10 +96,10 @@ impl<T> Node<T> where T: Clone {
             Some(_) => {},
             None => {
                 self.children = Some([
-                    create_child(ivec2(self.bounds.pos().x, self.bounds.pos().y + size.y)),
+                    create_child(vec2(self.bounds.pos().x, self.bounds.pos().y + size.y)),
                     create_child(self.bounds.center()),
                     create_child(self.bounds.bottom_left()),
-                    create_child(ivec2(self.bounds.pos().x + size.x, self.bounds.pos().y)),
+                    create_child(vec2(self.bounds.pos().x + size.x, self.bounds.pos().y)),
                 ]);
             },
         }
@@ -158,7 +157,10 @@ pub struct QuadTree<T> {
 
 impl<T: Clone> QuadTree<T> {
     pub fn new(width: f32, height: f32, max_depth: u8) -> Self {
-        let bounds = AABBI32::new(Vec2::new(-width, -height), Vec2::new(width, height));
+        let bounds = AABB {
+            min: Vec2::new(-width, -height),
+            max: Vec2::new(width, height),
+        };
         Self {
             root: Node::new(bounds, 0),
             max_depth,
@@ -166,11 +168,11 @@ impl<T: Clone> QuadTree<T> {
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(&data, &shape.bounds().as_aabbi32(), (0, self.max_depth), false);
+        self.root.insert(&data, &shape.bounds(), (0, self.max_depth), false);
     }
 
     pub fn insert_with_rebalance(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(&data, &shape.bounds().as_aabbi32(), (0, self.max_depth), true);
+        self.root.insert(&data, &shape.bounds(), (0, self.max_depth), true);
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
@@ -178,7 +180,7 @@ impl<T: Clone> QuadTree<T> {
         to_remove.clear();
     }
 
-    pub fn get_debug_info(&self) -> Vec<(usize, AABBI32)> {
+    pub fn get_debug_info(&self) -> Vec<(usize, AABB)> {
         let mut out = Vec::with_capacity(1024);
         self.root.get_debug_info(&mut out);
         out
