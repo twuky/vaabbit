@@ -26,8 +26,8 @@ impl Shape for Circle {
 
     fn bounds(&self) -> AABB {
         AABB {
-            pos: self.pos + vec2(-self.radius, -self.radius),
-            size: vec2(self.radius * 2.0, self.radius * 2.0)
+            min: self.pos - vec2(self.radius, self.radius),
+            max: self.pos + vec2(self.radius, self.radius),
         }
     }
 

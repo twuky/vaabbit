@@ -4,13 +4,25 @@ use glam::*;
 mod aabb;
 mod circle;
 mod solve;
+mod aabb_i32;
 
 pub use aabb::AABB;
 pub use circle::Circle;
+pub use aabb_i32::AABBI32;
 
+#[derive(Debug, Clone, Copy)]
 pub enum CollisionShape {
     AABB(AABB),
     CIRCLE(Circle)
+}
+
+impl CollisionShape {
+    pub fn bounds(&self) -> AABB {
+        match self {
+            CollisionShape::AABB(shape) => shape.bounds(),
+            CollisionShape::CIRCLE(shape) => shape.bounds(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -50,8 +62,8 @@ pub trait Shape {
     fn point_within_bounds(&self, point: Vec2) -> bool {
         let bounds = self.bounds();
 
-        (point.x > bounds.pos.x && point.x < bounds.pos.x + bounds.size.x) &&
-        (point.y > bounds.pos.y && point.y < bounds.pos.y + bounds.size.y)
+        (point.x > bounds.min.x && point.x < bounds.max.x) &&
+        (point.y > bounds.min.y && point.y < bounds.max.y)
     }
 
     fn bounds_overlaps_bounds(&self, other: impl Shape) -> bool {

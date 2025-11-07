@@ -3,45 +3,71 @@ use super::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
-    pub pos: Vec2,
-    pub size: Vec2
+    pub min: Vec2,
+    pub max: Vec2
 }
 
 impl AABB {
+
+    pub fn new(min: Vec2, max: Vec2) -> Self {
+        Self { min, max }
+    }
+
+    pub fn from_pos_size(pos: Vec2, size: Vec2) -> Self {
+        Self { min: pos, max: pos + size }
+    }
+
+    pub fn from_aabbi32(aabb: super::AABBI32) -> Self {
+        Self { min: aabb.min.as_vec2(), max: aabb.max.as_vec2() }
+    }
+
+    pub fn as_aabbi32(&self) -> super::AABBI32 {
+        super::AABBI32::new(self.min, self.max)
+    }
+
+    #[inline(always)]
     pub fn overlaps_aabb(&self, other: &AABB) -> bool {
-     ! (self.pos.x > other.pos.x + other.size.x ||
-        self.pos.x + self.size.x < other.pos.x ||
-        self.pos.y > other.pos.y + other.size.y ||
-        self.pos.y + self.size.y < other.pos.y)
+        self.min.x <= other.max.x &&
+        self.max.x >= other.min.x &&
+        self.min.y <= other.max.y &&
+        self.max.y >= other.min.y
+    }
+
+    pub fn pos(&self) -> Vec2 {
+        self.min
+    }
+
+    pub fn size(&self) -> Vec2 {
+        self.max - self.min
     }
 
     pub fn area(&self) -> f32 {
-        self.size.element_product()
+        self.size().element_product()
     }
 
     pub fn is_within_aabb(&self, other: &AABB) -> bool {
-        other.overlaps_point(self.pos) &&
-        other.overlaps_point(self.pos + self.size)
+        other.overlaps_point(self.min) &&
+        other.overlaps_point(self.max)
     }
 
     pub fn center(&self) -> Vec2 {
-        self.pos + self.size / 2.0
+        self.min + self.size() / 2.0
     }
 
     pub fn bottom_left(&self) -> Vec2 {
-        self.pos
+        self.min
     }
 
     pub fn bottom_right(&self) -> Vec2 {
-        self.pos + vec2(self.size.x, 0.0)
+        vec2(self.max.x, self.min.y)
     }
 
     pub fn top_left(&self) -> Vec2 {
-        self.pos + vec2(0.0, self.size.y)
+        vec2(self.min.x, self.max.y)
     }
 
     pub fn top_right(&self) -> Vec2 {
-        self.pos + self.size
+        vec2(self.max.x, self.max.y)
     }
 }
 
@@ -51,7 +77,7 @@ impl Shape for AABB {
     }
 
     fn centroid(&self) -> Vec2 {
-        vec2(self.pos.x + self.size.x / 2.0, self.pos.y + self.size.y / 2.0)
+        self.center()
     }
 
     fn bounds(&self) -> AABB {
@@ -76,10 +102,10 @@ impl Shape for AABB {
 
     fn edges(&self) -> Option<Vec<Edge>> {
         let (a, b, c, d) = (
-            self.pos,
-            self.pos + vec2(self.size.x, 0.0),
-            self.pos + self.size,
-            self.pos + vec2(0.0, self.size.y),
+            self.bottom_left(),
+            self.bottom_right(),
+            self.top_right(),
+            self.top_left()
         );
 
         Some(vec![
@@ -92,10 +118,10 @@ impl Shape for AABB {
 
     fn vertices(&self) -> Option<Vec<Vec2>> {
         Some(vec![
-            self.pos,
-            self.pos + vec2(self.size.x, 0.0),
-            self.pos + self.size,
-            self.pos + vec2(0.0, self.size.y),
+            self.bottom_left(),
+            self.bottom_right(),
+            self.top_right(),
+            self.top_left()
         ])
     }
 }

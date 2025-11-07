@@ -1,6 +1,5 @@
 use super::{Circle, Edge, Shape};
 
-
 pub fn overlaps_edge_edge(a: &Edge, b: &Edge) -> bool {
     let (a0, b0) = (a.a, a.b);
     let (c0, d0) = (b.a, b.b);
