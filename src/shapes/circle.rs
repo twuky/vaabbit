@@ -13,6 +13,12 @@ impl Circle {
     }
 
     pub fn diameter(&self) -> f32 { self.radius * 2.0}
+
+    pub fn overlaps_aabb(&self, other: &AABB) -> bool {
+        let d = self.radius + other.max.x - other.min.x;
+        let e = self.radius + other.max.y - other.min.y;
+        d * d + e * e <= self.radius * self.radius
+    }
 }
 
 impl Shape for Circle {
@@ -39,11 +45,11 @@ impl Shape for Circle {
         edge.overlaps_circle(self)
     }
     
-    fn overlaps_polygon(&self, other: impl Shape) -> bool {
-        super::solve::overlaps_poly_circle(&other, self)
+    fn overlaps_polygon(&self, other: &impl Shape) -> bool {
+        super::solve::overlaps_poly_circle(other, self)
     }
     
-    fn overlaps_circle(&self, other: Circle) -> bool {
+    fn overlaps_circle(&self, other: &circle::Circle) -> bool {
         self.pos.distance(other.pos) < self.radius + other.radius
     }
 

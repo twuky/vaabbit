@@ -1,10 +1,14 @@
+use std::char::MAX;
+
 use glam::{vec2, Vec2};
 use smallvec::{smallvec, SmallVec};
 use crate::shapes::{self, AABB};
 
+const MAX_ELEMENTS: usize = 8;
+
 pub struct Node<T> {
     pub bounds: AABB,                      // 16 bytes
-    pub elements: SmallVec<[(T, AABB); 128]>,      // 24 bytes
+    pub elements: SmallVec<[(T, AABB); 64]>,      // 24 bytes
     pub children: Option<[Box<Node<T>>; 4]>,  // 4 * 8 bytes = 32 bytes
 }
 
@@ -31,19 +35,11 @@ impl<T> Node<T> where T: Clone {
     }
 
 
-    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 8]>) {
+    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
         self.query_recursive(bounds, out);
-        // outmost layer may contain items that are outside of the bounds
-        if !bounds.overlaps_aabb(&self.bounds) {
-            for el in &self.elements {
-                if bounds.overlaps_aabb(&el.1) {
-                    out.push(el);
-                }   
-            }
-        }
     }
     
-    fn query_recursive<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 8]>) {
+    fn query_recursive<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
         match &self.children {
             Some(children) => {
                 for child in children {
@@ -55,13 +51,7 @@ impl<T> Node<T> where T: Clone {
             None => {}
         }
 
-        if bounds.overlaps_aabb(&self.bounds) {
-            for el in &self.elements {
-                if bounds.overlaps_aabb(&el.1) {
-                    out.push(&el);
-                }   
-            }
-        }
+        out.extend(&self.elements);
     }
 
     pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
@@ -77,8 +67,10 @@ impl<T> Node<T> where T: Clone {
             None => {}
         };
 
+        // as a last resort, it is outside the tree, so this should be the root
         self.elements.push((data.clone(), *bounds));
-        if should_rebalance && self.children.is_none() && self.elements.len() > 8 && depth < max_depth  {
+
+        if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
         }
     }
@@ -148,6 +140,21 @@ impl<T> Node<T> where T: Clone {
             true
         });
     }
+
+    pub fn get_total(&self) -> usize {
+        let mut total = 0;
+        self.get_total_recursive(&mut total, 0);
+        total
+    }
+
+    fn get_total_recursive(&self, total: &mut usize, depth: u8) {
+        *total += self.elements.len();
+        if let Some(children) = &self.children {
+            for child in children {
+                child.get_total_recursive(total, depth + 1);
+            }
+        }
+    }
 }
 
 pub struct QuadTree<T> {
@@ -158,13 +165,17 @@ pub struct QuadTree<T> {
 impl<T: Clone> QuadTree<T> {
     pub fn new(width: f32, height: f32, max_depth: u8) -> Self {
         let bounds = AABB {
-            min: Vec2::new(-width, -height),
-            max: Vec2::new(width, height),
+            min: Vec2::new(-width, -height) * 1.5,
+            max: Vec2::new(width, height) * 1.5,
         };
         Self {
             root: Node::new(bounds, 0),
             max_depth,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.root.get_total()
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {

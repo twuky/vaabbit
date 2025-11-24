@@ -1,5 +1,5 @@
 use macroquad::prelude::rand;
-use vaabbit::world::{self, actor::Actor, ID};
+use vaabbit::{World, Actor, ID};
 use vibbit::{Vibbit, Color};
 
 struct Bunny {
@@ -17,7 +17,7 @@ impl Bunny {
 }
 
 impl Actor for Bunny {
-    fn update(&mut self, _id: &ID<Self>, _world: &mut world::World) {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
         let pos = self.move_by(&self.vel, _id, _world);
         
         if pos.x < 0.0 {
@@ -31,10 +31,6 @@ impl Actor for Bunny {
         } else if pos.y > 480.0 {
             self.vel.y *= -1.0;
         }
-    }
-
-    fn on_collision(&mut self) {
-
     }
 }
 

@@ -1,14 +1,15 @@
-use std::{collections::HashMap};
 
 use anymap::AnyMap;
 use glam::Vec2;
-use pulz_arena::{Arena, Index, Mirror};
+use slotmap::{DefaultKey, SlotMap, SparseSecondaryMap};
 use smallvec::SmallVec;
-use crate::{physics::{self, quadtree::QuadTree, HasBounds}, shapes::{CollisionShape, AABB}, world::ID};
+use crate::{physics::{HasBounds, quadtree::QuadTree}, shapes::{AABB, CollisionShape}, ID, TypedID};
 
 pub(crate) struct PhysicsData {
     pub pos: Vec2,
     pub body: Option<CollisionShape>,
+
+    pub id: TypedID,
 }
 
 pub(crate) enum PhysicsBody {
@@ -18,8 +19,28 @@ pub(crate) enum PhysicsBody {
     Node,
 }
 
+impl PhysicsBody {
+    pub fn get_shape(&self) -> Option<&CollisionShape>{
+        match self {
+            PhysicsBody::Actor(data) => data.body.as_ref(),
+            PhysicsBody::Solid(data) => data.body.as_ref(),
+            PhysicsBody::Zone(data) => data.body.as_ref(),
+            PhysicsBody::Node => None
+        }
+    }
+
+    pub fn overlaps(&self, other: &PhysicsBody) -> bool {
+        let s = self.get_shape();
+        let o = other.get_shape();
+
+        if s.is_none() || o.is_none() {
+            return false;
+        }
+        s.unwrap().overlaps(o.unwrap())
+    }
+}
 pub struct PhyysicsEntry<T> {
-    pub body_indices: pulz_arena::Mirror<Index>,
+    pub body_indices: SparseSecondaryMap<slotmap::DefaultKey, slotmap::DefaultKey>,
     pub _type: std::marker::PhantomData<T>,
 }
 
@@ -49,31 +70,31 @@ impl HasBounds for PhysicsBody {
 }
 
 pub(crate) struct Physics {
-    physics_bodies: Arena<PhysicsBody>,
+    physics_bodies: SlotMap<slotmap::DefaultKey, PhysicsBody>,
     entities: AnyMap,
 
-    tree: QuadTree<Index>,
-    to_delete: Vec<Index>,
+    tree: QuadTree<slotmap::DefaultKey>,
+    to_delete: SparseSecondaryMap<slotmap::DefaultKey, ()>,
 
-    query_bodiies: Vec<PhysicsBody>
+    tree_bounds: AABB,
 }
 
 impl Physics {
     pub fn new(size: AABB) -> Self {
         Self {
-            physics_bodies: Arena::new(),
+            physics_bodies: SlotMap::new(),
             entities: AnyMap::new(),
             tree: QuadTree::new(size.size().x, size.size().y, 8),
-            to_delete: Vec::new(),
-            query_bodiies: Vec::new(),
+            to_delete: SparseSecondaryMap::new(),
+            tree_bounds: size,
         }
     }
 
     pub(crate) fn register_type<T: 'static>(&mut self) {
-        self.entities.insert::<PhyysicsEntry<T>>( PhyysicsEntry { body_indices: Mirror::new(), _type: std::marker::PhantomData });
+        self.entities.insert::<PhyysicsEntry<T>>( PhyysicsEntry { body_indices: SparseSecondaryMap::new(), _type: std::marker::PhantomData });
     }
 
-    fn idx_of<T: 'static>(&self, id: &ID<T>) -> Option<Index> {
+    fn idx_of<T: 'static>(&self, id: &ID<T>) -> Option<DefaultKey> {
         let entry = self.entities.get::<PhyysicsEntry<T>>().unwrap();
         entry.body_indices.get(id.index).cloned()
     }
@@ -85,7 +106,7 @@ impl Physics {
         self.tree.insert(idx, &bounds);
 
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        entry.body_indices.insert(id.index, idx);
+        let _ = entry.body_indices.insert(id.index, idx);
     }
 
     pub fn get_body<T: 'static>(&self, id: &ID<T>) -> Option<&PhysicsBody> {
@@ -107,8 +128,8 @@ impl Physics {
 
         self.tree.insert(new_idx, &bounds);
 
-        if let Ok(Some(old_idx)) = old_entry {
-            self.to_delete.push(old_idx);
+        if let Some(old_idx) = old_entry {
+            self.to_delete.insert(old_idx, ());
             self.physics_bodies.remove(old_idx);
         }
     }
@@ -118,33 +139,56 @@ impl Physics {
         let idx = entry.body_indices.get(id.index).unwrap();
 
         self.physics_bodies.remove(*idx);
-        self.to_delete.push(*idx);
+        self.to_delete.insert(*idx, ());
     }
 
     pub fn cleanup(&mut self) {
-        self.tree = QuadTree::new(2048.0, 2048.0, 12);
+        self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 16);
+        //we'll try to calculate the smallest bounds of all the bodies
+        let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
-        for id in self.to_delete.iter() {
-            self.physics_bodies.remove(*id);
+        for (id, _d) in self.to_delete.iter() {
+            self.physics_bodies.remove(id);
         }
         for (id, body) in self.physics_bodies.iter() {
-
             let bounds = body.bounds();
+
+            if bounds.min.x < min_bounds.min.x {
+                min_bounds.min.x = bounds.min.x;
+            }
+            if bounds.min.y < min_bounds.min.y {
+                min_bounds.min.y = bounds.min.y;
+            }
+            if bounds.max.x > min_bounds.max.x {
+                min_bounds.max.x = bounds.max.x;
+            }
+            if bounds.max.y > min_bounds.max.y {
+                min_bounds.max.y = bounds.max.y;
+            }
+
             self.tree.insert_with_rebalance(id, &bounds);
         }
         
         self.to_delete.clear();
+        min_bounds.min.x -= 32.0;
+        min_bounds.min.y -= 32.0;
+        min_bounds.max.x += 32.0;
+        min_bounds.max.y += 32.0;
+        self.tree_bounds = min_bounds;
     }
 
 
-    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 8]>) {
+    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 32]>) {
         let mut q = smallvec::SmallVec::new();
         self.tree.root.query(bounds, &mut q);
 
-        for (idx, _aabb) in &q {
-            // if self.to_delete.contains(idx) {
-            //     continue;
-            // }
+        let mut passed = 0;
+        for (idx, aabb) in &q {
+            if self.to_delete.contains_key(*idx) {continue}
+            passed += 1;
+            if !bounds.overlaps_aabb(aabb) {continue}
+            
+
             match self.physics_bodies.get(*idx) {
                 Some(body) => {
                     out.push(body);
@@ -152,6 +196,8 @@ impl Physics {
                 _ => {}
             }
         }
+        // debug
+        // println!("passed: {}, total: {}", passed, q.len());
     }
 
     pub fn get_debug_info(&self) -> Vec<(usize, AABB)> {

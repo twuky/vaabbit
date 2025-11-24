@@ -1,145 +1,105 @@
-use core::time;
-use std::{any::{type_name, TypeId}, collections::HashMap, hash::Hash, iter::Map, marker::PhantomData, ops::Deref, time::{Duration, Instant}};
-use std::cell::RefCell;
+use std::{any::{TypeId, type_name}, cell::OnceCell, hash::Hash, time::{Duration, Instant}};
 
 use glam::{vec2, Vec2};
-use pulz_arena::{Arena, Mirror};
+use slotmap::{SlotMap};
 use smallvec::SmallVec;
-use crate::{events::event::EventQueue, physics::{HasBounds, physics::{Physics, PhysicsBody, PhysicsData}}, shapes::{AABB, AABBI32, CollisionShape}, world::{self, actor::Actor}};
-
-pub mod actor;
-
-#[derive(Debug)]
-pub struct ID<T: ?Sized> {
-    pub index: pulz_arena::Index,
-    pub _type: std::marker::PhantomData<T>,
-}
-
-impl<T: 'static> ID<T> {
-    pub fn new(index: pulz_arena::Index) -> Self {
-        Self {
-            index,
-            _type: std::marker::PhantomData,
-        }
-    }
-
-    pub fn type_id(&self) -> TypeId {
-        TypeId::of::<T>()
-    }
-    pub fn type_name(&self) -> &'static str {
-        type_name::<T>()
-    }
-}
-
-impl<T> Clone for ID<T> {
-    fn clone(&self) -> Self {
-        Self {
-            index: self.index,
-            _type: std::marker::PhantomData,
-        }
-    }
-    
-    fn clone_from(&mut self, source: &Self) {
-        *self = source.clone()
-    }
-}
-impl <T> Copy for ID<T> {}
-
-impl <T> Eq for ID<T> {
-    
-}
-
-impl <T> Hash for ID<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.index.hash(state);
-    }
-}
-
-impl <T> PartialEq for ID<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-
-    }
-}
-
-impl PartialEq for ID<dyn Actor> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
-}
+use crate::{events::EventQueue, physics::{HasBounds, physics::{Physics, PhysicsBody, PhysicsData}}, shapes::{AABB, CollisionShape}};
+use crate::entity::ID;
+use crate::entity::Actor;
 
 pub struct RegistryEntry<T> {
-    pub arena: Arena<(ID<T>,T)>,
+    pub arena: SlotMap<slotmap::DefaultKey,(ID<T>,T)>,
     pub entities: Vec<ID<T>>,
 }
 
 pub struct Registry {
     pub types: Vec<TypeId>,
-    pub map: anymap::AnyMap,
+    //pub map: anymap::AnyMap,
 }
+
+static mut MAP: OnceCell<anymap::AnyMap> = OnceCell::new();
 
 impl Registry {
     pub fn new() -> Self {
+        unsafe {
+            MAP.get_or_init(|| {anymap::AnyMap::new()});
+        }
         Self {
             types: Vec::new(),
-            map: anymap::AnyMap::new(),
+            //map: anymap::AnyMap::new(),
         }
     }
 
-    pub fn get_entry<T: 'static>(&self) -> &RegistryEntry<T> {
-        self.map.get::<RegistryEntry<T>>().unwrap()
+    fn get_map() -> &'static mut anymap::AnyMap {
+        unsafe {MAP.get_mut().unwrap()}
     }
 
-    pub fn get_entry_mut<T: 'static>(&mut self) -> &mut RegistryEntry<T> {
-        self.map.get_mut::<RegistryEntry<T>>().unwrap()
+    pub fn get_entry<T: 'static>() -> &'static RegistryEntry<T> {
+        Self::get_map().get::<RegistryEntry<T>>().unwrap()
     }
 
-    pub fn create_entry<T: 'static>(&mut self) -> &mut RegistryEntry<T> {
+    pub fn get_entry_mut<T: 'static>() -> &'static mut RegistryEntry<T> {
+        Self::get_map().get_mut::<RegistryEntry<T>>().unwrap()
+    }
+
+    pub fn create_entry<T: 'static>() -> &'static mut RegistryEntry<T> {
         let &mut entry;
 
-        if !self.map.contains::<RegistryEntry<T>>() {
-            let arena = Arena::<(ID<T>,T)>::new();
+        if !Self::get_map().contains::<RegistryEntry<T>>() {
+            let arena = SlotMap::<slotmap::DefaultKey,(ID<T>,T)>::with_capacity(1024);
             let entities = Vec::new();
 
              entry = RegistryEntry {
                 arena,
                 entities,
             };
-            
-            self.map.insert(entry);
+
+            Self::get_map().insert(entry);
         }
 
-        self.map.get_mut::<RegistryEntry<T>>().unwrap()
+        Self::get_map().get_mut::<RegistryEntry<T>>().unwrap()
     }
 
-    pub fn insert<T: 'static>(&mut self, entity: T) -> ID<T> {
-        let entry = self.create_entry();
+    pub fn insert<T: 'static>(entity: T) -> ID<T> {
+        let entry = Self::create_entry();
 
-        let idx = entry.arena.insert_with(|idx| {
+        let idx = entry.arena.insert_with_key(|idx| {
             (ID::new(idx), entity)
         });
-        
+
         let id = ID::new(idx);
         entry.entities.push(id.clone());
 
         id
     }
 
-    pub fn get<T: 'static>(&self, id: &ID<T>) -> Option<&(ID<T>,T)> {
-        let entry = self.map.get::<RegistryEntry<T>>().unwrap();
+    pub fn get<T: 'static>(id: &ID<T>) -> Option<&(ID<T>,T)> {
+        let entry = Self::get_map().get::<RegistryEntry<T>>().unwrap();
         entry.arena.get(id.index)
     }
 
-    pub fn get_mut<T: 'static>(&mut self, id: &ID<T>) -> Option<&mut (ID<T>,T)> {
-        let entry = self.map.get_mut::<RegistryEntry<T>>().unwrap();
+    pub fn get_mut<T: 'static>(id: &ID<T>) -> Option<&mut (ID<T>,T)> {
+        let entry = Self::get_map().get_mut::<RegistryEntry<T>>().unwrap();
         entry.arena.get_mut(id.index)
     }
+
+    // pub fn pull<T: 'static>(id: &ID<T>) -> Option<(ID<T>,T)> {
+    //     println!("pulling: {:?}", id);
+    //     let entry = Self::get_map().get_mut::<RegistryEntry<T>>()?;
+    //     unsafe {entry.arena.pull(id.index)}
+    // }
+
+    // pub fn reinsert<T: 'static>(id: ID<T>, entity: T) {
+    //     println!("reinserting: {:?}", id);
+    //     let entry = Self::get_map().get_mut::<RegistryEntry<T>>().unwrap();
+    //     unsafe {entry.arena.reinsert(id.index, (id, entity))};
+    // }
 }
 
 
 
 struct EventBus {
-    events: Vec<Box<dyn FnOnce(&mut World)>>,
+    events: Vec<Box<dyn Fn(&mut World)>>,
 }
 
 impl EventBus {
@@ -159,11 +119,7 @@ pub struct World {
 
     events: EventQueue,
     physics: Physics,
-    
 }
-
-
-static mut query: Vec<&PhysicsBody> = Vec::new();
 
 impl World {
     pub fn new() -> Self {
@@ -177,16 +133,23 @@ impl World {
     }
 
 
-    pub fn subscribe<E: 'static, T: 'static, L: 'static>(&mut self, emitter: ID<T>, listener: ID<L>, closure: impl Fn(&E) + 'static) {
+    pub fn subscribe<E: 'static, T: 'static, L: 'static>(&mut self, emitter: ID<T>, listener: ID<L>, closure: impl Fn(&mut World, &E) + 'static) {
         self.events.subscribe(emitter, listener, closure);
     }
 
     pub fn emit<E: 'static, T: 'static>(&mut self, emitter: ID<T>, event: E) {
-        let events = self.events.get_listeners::<E, T>(emitter);
-        if let Some(events) = events {
-            for f in events.listeners.iter_mut() {
-                f(&event);
-            }
+        let mut drained = if let Some(e) = self.events.get_listeners::<E, T>(emitter) {
+            std::mem::take(&mut e.listeners)
+        } else {
+            Vec::new()
+        };
+
+        for f in &drained {
+            f(self, &event);
+        }
+
+        if let Some(e) = self.events.get_listeners::<E, T>(emitter) {
+            e.listeners.append(&mut drained);
         }
     }
 
@@ -196,7 +159,7 @@ impl World {
 
     pub(crate) fn register_type<T: Actor + 'static>(&mut self) {
         self.update_methods.push(T::update_system);
-        self.registry.create_entry::<T>();
+        Registry::create_entry::<T>();
         self.physics.register_type::<T>();
     }
 
@@ -206,14 +169,16 @@ impl World {
             self.registry.types.push(typeid);
             self.register_type::<T>();
         }
-        let id = self.registry.insert(actor);
+        let id = Registry::insert(actor);
 
         let body = PhysicsBody::Actor(PhysicsData {
             pos: Vec2::ZERO,
             body: Some(CollisionShape::AABB(AABB { min: Vec2::ZERO, max: vec2(32.0, 32.0)})),
+            id: id.into(),
         });
         self.physics.add_body(&id, body);
 
+        println!("added actor {:?}", id.index);
         id
     }
 
@@ -229,7 +194,8 @@ impl World {
     }
 
     pub fn get_pos<T: 'static>(&self, id: &ID<T>) -> &Vec2 {
-        let body = self.physics.get_body(id).unwrap();
+        let body = self.physics.get_body(id).unwrap_or(&PhysicsBody::Node{});
+
         match body {
             PhysicsBody::Actor(data) => &data.pos,
             PhysicsBody::Solid(data) => &data.pos,
@@ -238,33 +204,53 @@ impl World {
         }
     }
 
-    pub fn set_pos<T: 'static + Actor>(&mut self, id: &ID<T>, pos: Vec2) {
-        let body = self.physics.get_body(id).unwrap();
+    pub fn set_pos<T: 'static + Actor>(&mut self, id: ID<T>, pos: Vec2) {
+        let body = self.physics.get_body(&id).unwrap();
+        
         let new_body = match body {
-            PhysicsBody::Actor(data) => PhysicsBody::Actor(PhysicsData { pos, body: data.body }),
-            PhysicsBody::Solid(data) => PhysicsBody::Solid(PhysicsData { pos, body: data.body }),
-            PhysicsBody::Zone(data) => PhysicsBody::Zone(PhysicsData { pos, body: data.body }),
+            PhysicsBody::Actor(data) => PhysicsBody::Actor(PhysicsData { pos, body: data.body, id: id.into() }),
+            PhysicsBody::Solid(data) => PhysicsBody::Solid(PhysicsData { pos, body: data.body, id: id.into() }),
+            PhysicsBody::Zone(data) => PhysicsBody::Zone(PhysicsData { pos, body: data.body, id: id.into() }),
             PhysicsBody::Node => PhysicsBody::Node,
         };
+        
+
         let bounds = new_body.bounds();
-        self.physics.update_body(id, new_body);
+        self.physics.update_body(&id, new_body);
+        
 
         let mut q = SmallVec::new();
         self.physics.query(&bounds, &mut q);
+        
 
+        let this_type = id.type_id();
         for body in q {
-            if let PhysicsBody::Actor(data) = body {
-                if data.body.is_some() && data.bounds().overlaps_aabb(&bounds) {
-                    self.with(id, |ett| {
-                        ett.on_collision();
-                    })
-                }
+            let b = match(body) {
+                PhysicsBody::Actor(data) => data,
+                PhysicsBody::Solid(data) => data,
+                PhysicsBody::Zone(data) => data,
+                PhysicsBody::Node => continue,
+            };
+
+            
+
+            if b.id.type_id == this_type && b.id.index == id.index {
+                // we don't collide with ourselves
+                continue;
             }
+
+            let other_id = b.id.clone();
+            println!("    COLLISION: {:?} x {:?}", id, other_id);
+            self.with_world(&id, move |ett, world| {
+                println!("    on_collision event: {:?}", other_id);
+                ett.on_collision(&id, other_id, world);
+                println!("    END on_collision event: {:?}", other_id);
+            });
         }
     }
 
-    pub fn move_by<T: 'static + Actor>(&mut self, id: &ID<T>, delta: &Vec2) -> Vec2 {
-        let body = self.physics.get_body(id).unwrap();
+    pub fn move_by<T: 'static + Actor>(&mut self, id: ID<T>, delta: &Vec2) -> Vec2 {
+        let body = self.physics.get_body(&id).unwrap();
         let new_pos = match body {
             PhysicsBody::Actor(data) => data.pos + delta,
             PhysicsBody::Solid(data) => data.pos + delta,
@@ -272,24 +258,47 @@ impl World {
             PhysicsBody::Node => Vec2::ZERO,
         };
         let new_body = match body {
-            PhysicsBody::Actor(data) => PhysicsBody::Actor(PhysicsData { pos: new_pos, body: data.body }),
-            PhysicsBody::Solid(data) => PhysicsBody::Solid(PhysicsData { pos: new_pos, body: data.body }),
-            PhysicsBody::Zone(data) => PhysicsBody::Zone(PhysicsData { pos: new_pos, body: data.body }),
+            PhysicsBody::Actor(data) => PhysicsBody::Actor(PhysicsData { pos: new_pos, body: data.body, id: id.into() }),
+            PhysicsBody::Solid(data) => PhysicsBody::Solid(PhysicsData { pos: new_pos, body: data.body, id: id.into() }),
+            PhysicsBody::Zone(data) => PhysicsBody::Zone(PhysicsData { pos: new_pos, body: data.body, id: id.into() }),
             PhysicsBody::Node => PhysicsBody::Node,
         };
         let bounds = new_body.bounds();
-            
-        self.physics.update_body(id, new_body);
-        
+
+        self.physics.update_body(&id, new_body);
+
         let mut q = SmallVec::new();
         self.physics.query(&bounds, &mut q);
 
+        let mut q_len = 0;
+
         // if theres more than one body in the query, theres a collision (probably lol)
-        if q.len() > 1 {
-            self.with(id, |ett| {
-                ett.on_collision();
+        // if q.len() > 1 {
+        //     self.with(&id, |ett| {
+        //         ett.on_collision();
+        //     });
+        // }
+
+        let this_type = id.type_id();
+        for body in q {
+            let b = match body {
+                PhysicsBody::Actor(data) => data,
+                PhysicsBody::Solid(data) => data,
+                PhysicsBody::Zone(data) => data,
+                PhysicsBody::Node => continue,
+            };
+
+            if b.id.type_id == this_type && b.id.index == id.index {
+                continue;
+            }
+
+            let other_id = b.id.clone();
+            self.with_world(&id, move |ett, world| {
+                ett.on_collision(&id, other_id, world);
             });
+            q_len += 1;
         }
+
         new_pos
     }
 
@@ -299,45 +308,71 @@ impl World {
     You should not modify other entities directly inside update methods.
     If you need to mutate properties on another entity, queue an action on it using the `world.with()` method.
     */
-    pub fn get<T: 'static>(&self, id: &ID<T>) -> &T {
-        &self.registry.get(id).unwrap().1
+    pub fn get<'a, T: 'static>(&self, id: &'a ID<T>) -> Option<&'a T> {
+        Some(&Registry::get(id)?.1)
     }
 
-    fn get_mut<T: 'static>(&mut self, id: &ID<T>) -> &mut T {
-        &mut self.registry.get_mut(id).unwrap().1
+    pub(crate) fn get_mut<'a, T: 'static>(&mut self, id: &'a ID<T>) -> Option<&'a mut T> {
+        Some(&mut Registry::get_mut(id)?.1)
     }
 
-    pub fn with<T: 'static>(&self, id: &ID<T>, f: impl FnOnce(&mut T) + 'static) {
+    pub fn with<T: 'static>(&self, id: &ID<T>, f: impl Fn(&mut T) + 'static) {
+        let id = id.clone();
+        let closure = move |_world: &mut World| {
+            let entry = Registry::get_mut(&id);
+            if let Some(entity) = entry {
+                f(&mut entity.1);
+            } else {
+                println!("with(entity) not found: {:?}", id.clone());
+                println!("perhaps already in use?");
+            }
+        };
+
+        unsafe { EVENT_BUS.events.push(Box::new(closure)) }
+    }
+
+    pub fn with_world<T: 'static>(&self, id: &ID<T>, f: impl Fn(&mut T, &mut World) + 'static) {
         let id = id.clone();
         let closure = move |world: &mut World| {
-            let mut entity = world.get_mut(&id.clone());
-            f(&mut entity);
+            let entry = Registry::get_mut(&id);
+
+            if let Some(entity) = entry {
+                f(&mut entity.1, world);
+            } else {
+                println!("with(entity) not found: {:?}", id.clone());
+                println!("perhaps already in use?");
+            }
         };
 
         unsafe { EVENT_BUS.events.push(Box::new(closure)) }
     }
 
     pub fn query<T: 'static>(&self) -> impl Iterator<Item = &T> + use<'_, T> {
-        self.registry.get_entry::<T>().arena.iter().map(|(_index, item)| &item.1)
+       Registry::get_entry::<T>().arena.iter().map(|(_index, item)| &item.1)
     }
 
     pub fn query_id<T: 'static>(&self) -> impl Iterator<Item = &(ID<T>,T)> + use<'_, T> {
-        self.registry.get_entry::<T>().arena.iter().map(|(_index, item)| item)
+        Registry::get_entry::<T>().arena.iter().map(|(_index, item)| item)
     }
 
     pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> + use<'_, T> {
-        self.registry.get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| &mut item.1)
+        Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| &mut item.1)
     }
 
     pub fn query_id_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut (ID<T>,T)> + use<'_, T> {
-        self.registry.get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| item)
+        Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| item)
     }
 
-    fn flush_events(&mut self) {
+    pub(crate) fn flush_events(&mut self) {
         if unsafe { EVENT_BUS.events.len() } == 0 {return}
-        for event in unsafe { EVENT_BUS.events.drain(..) } {
+        // THE DRAIN(..) WAS THE SOLUTION TO SO MANY HOURS OF DEBUGGING OH MY GHOD
+        // i tried so many tricks with the arena allocator and it was just not the issue
+        // STATUS_HEAP_CORRUPTION is my worst enemy
+        let events: Vec<Box<dyn Fn(&mut World)>> = unsafe { std::mem::take(&mut EVENT_BUS.events)};
+
+        for event in events {
             event(self);
         }
     }
-   
+
 }

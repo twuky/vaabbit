@@ -46,8 +46,8 @@ impl AABB {
     }
 
     pub fn is_within_aabb(&self, other: &AABB) -> bool {
-        other.overlaps_point(self.min) &&
-        other.overlaps_point(self.max)
+        other.point_within_bounds(self.min) &&
+        other.point_within_bounds(self.max)
     }
 
     pub fn center(&self) -> Vec2 {
@@ -69,6 +69,14 @@ impl AABB {
     pub fn top_right(&self) -> Vec2 {
         vec2(self.max.x, self.max.y)
     }
+
+    pub fn width(&self) -> f32 {
+        self.max.x - self.min.x
+    }
+
+    pub fn height(&self) -> f32 {
+        self.max.y - self.min.y
+    }
 }
 
 impl Shape for AABB {
@@ -85,18 +93,21 @@ impl Shape for AABB {
     }
 
     fn overlaps_point(&self, point: Vec2) -> bool {
-        self.point_within_bounds(point)
+        point.x >= self.min.x && 
+        point.x <= self.max.x && 
+        point.y >= self.min.y && 
+        point.y <= self.max.y
     }
 
     fn overlaps_edge(&self, edge: Edge) -> bool {
         super::solve::overlaps_poly_edge(self, &edge)
     }
     
-    fn overlaps_polygon(&self, other: impl Shape) -> bool {
-        super::solve::overlaps_poly_poly(self, &other)
+    fn overlaps_polygon(&self, other: &impl Shape) -> bool {
+        super::solve::overlaps_poly_poly(self, other)
     }
     
-    fn overlaps_circle(&self, other: Circle) -> bool {
+    fn overlaps_circle(&self, other: &Circle) -> bool {
         super::solve::overlaps_poly_circle(self, &other)
     }
 

@@ -535,7 +535,7 @@ dependencies = [
  "anymap",
  "glam 0.30.8",
  "macroquad",
- "pulz-arena",
+ "slotmap",
  "smallvec",
  "ulid",
  "vibbit",

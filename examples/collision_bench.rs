@@ -1,8 +1,10 @@
-use vaabbit::world::actor::Actor;
+use std::time::SystemTime;
+
+use vaabbit::{World, Actor, ID, TypedID};
 use vibbit::{Color, Vibbit};
 use macroquad::prelude::rand;
 
-static mut dt : f32 = 0.0;
+static mut DT : f32 = 0.0;
 
 struct Rect {
     vel: glam::Vec2,
@@ -19,9 +21,9 @@ impl Rect {
 }
 
 impl Actor for Rect {
-    fn update(&mut self, _id: &vaabbit::world::ID<Self>, _world: &mut vaabbit::world::World) {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
         self.color = Color::new(255,255,255,255);
-        let pos = self.move_by(&(&self.vel * unsafe{dt} * 60.0), _id, _world);
+        let pos = self.move_by(&(&self.vel * unsafe{DT} * 60.0), _id, _world);
         
         if pos.x < 0.0 || pos.x > 1280.0 - 32.0 {
             self.vel.x *= -1.0;
@@ -31,7 +33,7 @@ impl Actor for Rect {
         }
     }
 
-    fn on_collision(&mut self) {
+    fn on_collision(&mut self, _id: &ID<Self>, _other: TypedID, _world: &mut World) {
         // println!("collision");
         self.vel *= -1.0;
         self.color = Color::new(255,0,0,255);
@@ -42,25 +44,21 @@ fn main() {
     vib.set_target_fps(0.0);
     let mut world = vaabbit::world::World::new();
 
-    let mut bunnies = 0;
+    rand::srand(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64);
 
     let offset = vibbit::Vec2::new(-640.0, -360.0);
 
-    for _ in 0..300 {
+    for _ in 0..100 {
         let id = world.add_actor(Rect::new());
-        bunnies += 1;
-        world.set_pos(&id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
+        world.set_pos(id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
     }
-
-    let f = vib.default_font();
 
     while !vib.should_close() {
         world.update_systems();
 
-        unsafe {dt = vib.get_delta_time(); }
+        unsafe {DT = vib.get_delta_time(); }
 
         vib.clear_screen(Color::new(0,0,0,255));
-        let white = Color::new(255,255,255,255);
 
         for (_id, rect) in world.query_id::<Rect>() {
             let pos = world.get_pos(_id);

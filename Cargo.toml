@@ -6,24 +6,28 @@ edition = "2021"
 
 [profile.dev]
 opt-level = 3
+debug = true
 
 [profile.dev.package."*"]
 opt-level = 3
+debug = true
 
 [profile.release]
 opt-level = 3
 debug = true
+overflow-checks = true
 
 [profile.release.package."*"]
 opt-level = 3
-
+debug = true
+overflow-checks = true
 
 [dependencies]
 anymap = "*"
 glam = "*"
-pulz-arena = "*"
 smallvec = "1.15.1"
 ulid = "*"
+slotmap = "*"
 
 [dev-dependencies]
 macroquad = "*"

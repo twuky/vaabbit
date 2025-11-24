@@ -1,15 +1,13 @@
-use std::{collections::HashMap, vec};
-use crate::world::ID;
+use std::collections::HashMap;
+use crate::{World, ID};
 
-
-
-pub type Event<T> = T;
+pub type Signal<T> = T;
 
 pub trait EventEmitter<T> {
     fn emit<I: 'static>(world: &mut crate::world::World, id: &ID<I>, event: T);
 }
 
-impl<T: 'static> EventEmitter<T> for Event<T> {
+impl<T: 'static> EventEmitter<T> for Signal<T> {
     fn emit<I: 'static>(world: &mut crate::world::World, id: &ID<I>, event: T) {
         world.emit(id.clone(), event);
     }
@@ -17,18 +15,14 @@ impl<T: 'static> EventEmitter<T> for Event<T> {
 
 pub struct EventQueue {
     pub(crate) events: anymap::AnyMap,
-
 }
 pub(crate) struct EventListeners<E> {
-    _phantom: std::marker::PhantomData<E>,
-
-    pub(crate) listeners: Vec<Box<dyn Fn(&E)>>,
+    pub(crate) listeners: Vec<Box<dyn Fn(&mut World,&E)>>,
 }
 
 impl<E> EventListeners<E> {
     pub fn new() -> Self {
         Self {
-            _phantom: std::marker::PhantomData,
             listeners: Vec::new(),
         }
     }
@@ -53,7 +47,11 @@ impl EventQueue {
         }
     }
 
-    pub(crate) fn get_entry_mut<T: 'static, E: 'static>(&mut self) -> &mut EventQueueEntry<T, E> {
+    fn _get_entry<T: 'static, E: 'static>(&self) -> Option<&EventQueueEntry<T, E>> {
+        self.events.get::<EventQueueEntry<T, E>>()
+    }
+
+    fn get_entry_mut<T: 'static, E: 'static>(&mut self) -> &mut EventQueueEntry<T, E> {
         if self.events.contains::<EventQueueEntry<T, E>>() {
             self.events.get_mut::<EventQueueEntry<T, E>>().unwrap()
         } else {
@@ -64,7 +62,7 @@ impl EventQueue {
     }
 
     pub fn subscribe<E: 'static, T: 'static, L: 'static>
-    (&mut self, emitter: ID<T>, listener: ID<L>, closure: impl Fn(&E) + 'static) {
+    (&mut self, emitter: ID<T>, _listener: ID<L>, closure: impl Fn(&mut World, &E) + 'static) {
         let entry = self.get_entry_mut::<T, E>();
 
         if !entry.emitters.contains_key(&emitter) {
@@ -75,11 +73,11 @@ impl EventQueue {
         listeners.listeners.push(Box::new(closure));
     }
 
-    pub(crate) fn emit<E: 'static, T: 'static>(&mut self, emitter: ID<T>, event: E) {
+    pub(crate) fn _emit<E: 'static, T: 'static>(&mut self, world: &mut World, emitter: ID<T>, event: E) {
         let entry = self.get_entry_mut::<T, E>();
         if let Some(listeners) = entry.emitters.get_mut(&emitter) {
             for listener in listeners.listeners.iter_mut() {
-                listener(&event);
+                listener(world, &event);
             }
         }
     }

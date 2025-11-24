@@ -23,6 +23,21 @@ impl CollisionShape {
             CollisionShape::CIRCLE(shape) => shape.bounds(),
         }
     }
+
+    pub fn overlaps(&self, other: &CollisionShape) -> bool {
+        match (self, other) {
+            (CollisionShape::AABB(a), CollisionShape::AABB(b)) => a.overlaps_aabb(b),
+            (CollisionShape::CIRCLE(a), CollisionShape::CIRCLE(b)) => a.overlaps_circle(b),
+            _ => false
+        }
+    }
+
+    pub fn overlaps_aabb(&self, other: &AABB) -> bool {
+        match self {
+            CollisionShape::AABB(a) => a.overlaps_aabb(other),
+            CollisionShape::CIRCLE(a) => a.overlaps(other),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,8 +71,8 @@ pub trait Shape {
 
     fn overlaps_point(&self, point: Vec2) -> bool;
     fn overlaps_edge(&self, edge: Edge) -> bool;
-    fn overlaps_polygon(&self, other: impl Shape) -> bool;
-    fn overlaps_circle(&self, other: Circle) -> bool;
+    fn overlaps_polygon(&self, other: &impl Shape) -> bool;
+    fn overlaps_circle(&self, other: &Circle) -> bool;
 
     fn point_within_bounds(&self, point: Vec2) -> bool {
         let bounds = self.bounds();
@@ -73,8 +88,8 @@ pub trait Shape {
     fn overlaps<T: Shape>(&self, other: &T) -> bool {
         let other_shape = other.as_collision_shape();
         match other_shape {
-            CollisionShape::AABB(o) => self.overlaps_polygon(o),
-            CollisionShape::CIRCLE(o) => self.overlaps_circle(o),
+            CollisionShape::AABB(o) => self.overlaps_polygon(&o),
+            CollisionShape::CIRCLE(o) => self.overlaps_circle(&o),
         }
     }
 }

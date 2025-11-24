@@ -1,7 +1,5 @@
-use glam::I16Vec2;
 use glam::IVec2;
 use glam::Vec2;
-use glam::i16vec2;
 use glam::ivec2;
 
 #[derive(Debug, Clone, Copy)]

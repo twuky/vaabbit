@@ -2,10 +2,9 @@ use std::time::Instant;
 
 use ::glam::Vec2;
 use miniquad::window::set_window_size;
-use pulz_arena::Index;
 use smallvec::SmallVec;
 use vaabbit::{shapes::*, physics::quadtree::{Node, QuadTree}};
-use macroquad::{color, prelude::*, window};
+use macroquad::{prelude::*};
 
 #[macroquad::main("visualize_tree")]
 async fn main() {
@@ -14,7 +13,7 @@ async fn main() {
     let mut tree = QuadTree::<u32>::new(600.0, 600.0, 8);
 
     let t = Instant::now();
-    for i in 0..3_000 {
+    for i in 0..300 {
         let pos = Vec2::new(300.0, 300.0) + Vec2::new(rand::gen_range(-280.0, 280.0), rand::gen_range(-280.0, 280.0));
         let size = Vec2::new(rand::gen_range(5.0, 30.0), rand::gen_range(5.0, 30.0));
 

@@ -1,24 +1,27 @@
 use std::any::TypeId;
 use glam::Vec2;
 
-use crate::{shapes::CollisionShape, world::{World, ID}};
+use crate::{entity::{ID, TypedID}, world::{self, Registry, World}};
 
 pub trait Actor: Send + Sync + 'static {
     fn update(&mut self, id: &ID<Self>, world: &mut World) where Self: Sized;
 
     fn update_system(world: &mut World) where Self: Sized {
-        let entities = world.registry.get_entry::<Self>().entities.clone();
+        let entities = Registry::get_entry::<Self>().entities.clone();
 
         for id in entities {
-            unsafe {
-                let mut actor = std::ptr::read(world.get_mut(&id));
-                actor.update(&id, world);
-                std::ptr::write(world.get_mut(&id), actor);
+            let entry = Registry::get_mut(&id);
+
+            if let Some(actor) = entry {
+                actor.1.update(&actor.0, world);
+                world.flush_events();
+            } else {
+                println!("update(): actor not found: {:?}", id.clone());
+                println!("perhaps already in use?");
             }
-            world.flush_events();
         }
     }
-
+    
     fn type_id(&self) -> TypeId {
         TypeId::of::<Self>()
     }
@@ -30,14 +33,14 @@ pub trait Actor: Send + Sync + 'static {
         world.get_pos(id)
     }
     fn set_pos(&mut self, pos: Vec2, id: &ID<Self>, world: &'static mut World) where Self:Sized {
-        world.set_pos(id, pos);
+        world.set_pos(*id, pos);
     }
     fn move_by<'a>(&self, vector: &Vec2, id: &ID<Self>, world: &'a mut World) -> Vec2 where Self: Sized {
-        world.move_by(id, vector)
+        world.move_by(*id, vector)
     }
 
-    fn on_collision(&mut self) {
-        
+    fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+
     }
 
 }
