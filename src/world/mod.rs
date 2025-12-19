@@ -178,7 +178,6 @@ impl World {
         });
         self.physics.add_body(&id, body);
 
-        println!("added actor {:?}", id.index);
         id
     }
 
@@ -240,11 +239,8 @@ impl World {
             }
 
             let other_id = b.id.clone();
-            println!("    COLLISION: {:?} x {:?}", id, other_id);
             self.with_world(&id, move |ett, world| {
-                println!("    on_collision event: {:?}", other_id);
                 ett.on_collision(&id, other_id, world);
-                println!("    END on_collision event: {:?}", other_id);
             });
         }
     }
@@ -252,9 +248,9 @@ impl World {
     pub fn move_by<T: 'static + Actor>(&mut self, id: ID<T>, delta: &Vec2) -> Vec2 {
         let body = self.physics.get_body(&id).unwrap();
         let new_pos = match body {
-            PhysicsBody::Actor(data) => data.pos + delta,
-            PhysicsBody::Solid(data) => data.pos + delta,
-            PhysicsBody::Zone(data) => data.pos + delta,
+            PhysicsBody::Actor(data) => data.pos + *delta,
+            PhysicsBody::Solid(data) => data.pos + *delta,
+            PhysicsBody::Zone(data) => data.pos + *delta,
             PhysicsBody::Node => Vec2::ZERO,
         };
         let new_body = match body {
@@ -339,7 +335,7 @@ impl World {
             if let Some(entity) = entry {
                 f(&mut entity.1, world);
             } else {
-                println!("with(entity) not found: {:?}", id.clone());
+                println!("with_world(entity) not found: {:?}", id.clone());
                 println!("perhaps already in use?");
             }
         };

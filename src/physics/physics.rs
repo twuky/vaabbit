@@ -3,7 +3,7 @@ use anymap::AnyMap;
 use glam::Vec2;
 use slotmap::{DefaultKey, SlotMap, SparseSecondaryMap};
 use smallvec::SmallVec;
-use crate::{physics::{HasBounds, quadtree::QuadTree}, shapes::{AABB, CollisionShape}, ID, TypedID};
+use crate::{ID, TypedID, physics::{HasBounds, quadtree::{QuadTree}}, shapes::{AABB, CollisionShape}};
 
 pub(crate) struct PhysicsData {
     pub pos: Vec2,

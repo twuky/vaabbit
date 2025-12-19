@@ -59,7 +59,6 @@ impl Actor for Player {
 
         self.pos += vel * 2.0;
 
-        //println!("{:?}", self.pos);
         draw_rectangle(self.pos.x, self.pos.y, 10.0, 10.0, color::RED);
     }
 }

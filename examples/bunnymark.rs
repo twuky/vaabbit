@@ -17,6 +17,7 @@ impl Bunny {
 }
 
 impl Actor for Bunny {
+    #[inline(always)]
     fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
         let pos = self.move_by(&self.vel, _id, _world);
         

@@ -21,6 +21,15 @@ impl TypedID {
             type_id: std::any::TypeId::of::<T>(),
         }
     }
+
+    pub fn is<T: 'static>(&self) -> Option<ID<T>> {
+        match self.type_id {
+            id if id == std::any::TypeId::of::<T>() => {
+                Some(ID::<T>::from(self.clone()))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl <T: 'static> From<ID<T>> for TypedID {

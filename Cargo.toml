@@ -14,13 +14,12 @@ debug = true
 
 [profile.release]
 opt-level = 3
-debug = true
-overflow-checks = true
+lto = "fat"
+codegen-units = 1
 
 [profile.release.package."*"]
 opt-level = 3
-debug = true
-overflow-checks = true
+codegen-units = 1
 
 [dependencies]
 anymap = "*"

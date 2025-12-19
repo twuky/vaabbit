@@ -22,7 +22,6 @@ async fn main() {
         tree.insert_with_rebalance(i, &rect);
     }
     let dur = Instant::now() - t;
-    println!("tree time: {}ms", dur.as_secs_f64() * 1000.0);
 
     loop {
         
@@ -64,7 +63,7 @@ fn draw_node<T>(node: &Node<T>) {
     }
 
     if let Some(children) = &node.children {
-        for i in children {
+        for i in children.iter() {
             draw_node(&i)
         }
     }

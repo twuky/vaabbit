@@ -45,9 +45,15 @@ impl AABB {
         self.size().element_product()
     }
 
+    #[inline(always)]
     pub fn is_within_aabb(&self, other: &AABB) -> bool {
         other.point_within_bounds(self.min) &&
         other.point_within_bounds(self.max)
+    }
+
+    pub fn expand(&mut self, amount: f32) {
+        self.min -= vec2(amount, amount);
+        self.max += vec2(amount, amount);
     }
 
     pub fn center(&self) -> Vec2 {
@@ -92,6 +98,7 @@ impl Shape for AABB {
         *self
     }
 
+    #[inline(always)]
     fn overlaps_point(&self, point: Vec2) -> bool {
         point.x >= self.min.x && 
         point.x <= self.max.x && 

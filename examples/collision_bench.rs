@@ -23,7 +23,7 @@ impl Rect {
 impl Actor for Rect {
     fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
         self.color = Color::new(255,255,255,255);
-        let pos = self.move_by(&(&self.vel * unsafe{DT} * 60.0), _id, _world);
+        let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _id, _world);
         
         if pos.x < 0.0 || pos.x > 1280.0 - 32.0 {
             self.vel.x *= -1.0;
@@ -48,7 +48,7 @@ fn main() {
 
     let offset = vibbit::Vec2::new(-640.0, -360.0);
 
-    for _ in 0..100 {
+    for _ in 0..300 {
         let id = world.add_actor(Rect::new());
         world.set_pos(id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
     }

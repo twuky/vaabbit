@@ -58,42 +58,50 @@ impl Actor for Player {
     }
 
     fn on_collision(&mut self, id: &ID<Self>, other: TypedID, world: &mut World) {
+        // Can detect the type of the colliding object
+        // with the is() method
+        if let Some(c_id) = other.is::<Coin>() {
+
+            if let Some(coin) = world.get(&c_id) {
+                if coin.eaten {return}
+            }
+            
+            world.with(&ID::<Coin>::from(other), |coin: &mut Coin| {
+                coin.eaten = true;
+                println!("im eaten!");
+            });
+            
+            world.with_world(&other.into(), move |_coin: &mut Coin, world| {
+                let random_pos = vaabbit::Vec2::new(rand::gen_range(0.0, 640.0), rand::gen_range(0.0, 480.0));
+                let c_id = world.add_actor(Coin {eaten: false});
+                println!("updating new coin pos: {:?}", c_id);
+                
+
+                world.with_world(&c_id, move |_coin: &mut Coin, world| {
+                    world.set_pos(c_id, random_pos);
+                    println!("--x moving coin to {:?}", c_id);
+                });
+            });
+        }
+
+        if let Some(other) = other.is::<Block>() {
+            println!("player collision with {:?}", other);
+
+            let p_id = id.clone();
+            world.with_world(id, move |p, world| {
+                world.move_by(p_id, &(p.vel * -2.0));
+            });
+        }
+
+        // pattern matching method:
         let t_coin = vaabbit::type_of::<Coin>();
         let t_block = vaabbit::type_of::<Block>();
         match other.type_id {
             idx if idx == t_coin => {
-
-                let c_id: ID<Coin> = other.into();
-
-                if let Some(coin) = world.get(&c_id) {
-                    if coin.eaten {return}
-                }
-                
-                world.with(&ID::<Coin>::from(other), |coin: &mut Coin| {
-                    coin.eaten = true;
-                    println!("im eaten!");
-                });
-                
-                world.with_world(&other.into(), move |_coin: &mut Coin, world| {
-                    let random_pos = vaabbit::Vec2::new(rand::gen_range(0.0, 640.0), rand::gen_range(0.0, 480.0));
-                    let c_id = world.add_actor(Coin {eaten: false});
-                    println!("updating new coin pos: {:?}", c_id);
-                    
-
-                    world.with_world(&c_id, move |_coin: &mut Coin, world| {
-                        world.set_pos(c_id, random_pos);
-                        println!("--x moving coin to {:?}", c_id);
-                    });
-                });
                 
             }
             idx if idx == t_block => {
-                println!("player collision with {:?}", other);
 
-                let p_id = id.clone();
-                world.with_world(id, move |p, world| {
-                    world.move_by(p_id, &(p.vel * -2.0));
-                });
             }
             _ => {}
         }

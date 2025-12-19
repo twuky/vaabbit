@@ -1,15 +1,14 @@
-use std::char::MAX;
-
 use glam::{vec2, Vec2};
 use smallvec::{smallvec, SmallVec};
 use crate::shapes::{self, AABB};
 
-const MAX_ELEMENTS: usize = 8;
+const MAX_ELEMENTS: usize = 16;
 
 pub struct Node<T> {
     pub bounds: AABB,                      // 16 bytes
-    pub elements: SmallVec<[(T, AABB); 64]>,      // 24 bytes
-    pub children: Option<[Box<Node<T>>; 4]>,  // 4 * 8 bytes = 32 bytes
+    pub children: Option<Box<[Node<T>; 4]>>,  // 4 * 8 bytes = 32 bytes
+    pub elements: SmallVec<[(T, AABB); 32]>,      // 24 bytes
+    
 }
 
 impl<T> Node<T> where T: Clone {
@@ -24,7 +23,7 @@ impl<T> Node<T> where T: Clone {
     pub fn get_debug_info(&self, out: &mut Vec<(usize, AABB)>) {
         match &self.children {
             Some(children) => {
-                for child in children {
+                for child in children.iter() {
                     child.get_debug_info(out);
                 }
             },
@@ -34,15 +33,36 @@ impl<T> Node<T> where T: Clone {
         out.push((self.elements.len(), self.bounds));
     }
 
+    fn collect_all<'a>(&'a self, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
+        out.extend(&self.elements);
+        if let Some(children) = &self.children {
+            for child in children.iter() {
+                child.collect_all(out);
+            }
+        }
+    }
 
     pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
-        self.query_recursive(bounds, out);
+        let mut stack = SmallVec::<[&Node<T>; 64]>::new();
+        stack.push(self);
+
+        while let Some(node) = stack.pop() {
+            if let Some(children) = &node.children {
+                for child in children.iter() {
+                    if bounds.overlaps_aabb(&child.bounds) {
+                        stack.push(child);
+                    }
+                }
+            }
+
+            out.extend(&node.elements);
+        }
     }
-    
+
     fn query_recursive<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
         match &self.children {
             Some(children) => {
-                for child in children {
+                for child in children.iter() {
                     if bounds.overlaps_aabb(&child.bounds) {
                         child.query_recursive(bounds, out);
                     }
@@ -57,7 +77,7 @@ impl<T> Node<T> where T: Clone {
     pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         match &mut self.children {
             Some(children) => {
-                for child in children {
+                for child in children.iter_mut() {
                     if bounds.is_within_aabb(&child.bounds) {
                         child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
                         return;
@@ -80,19 +100,20 @@ impl<T> Node<T> where T: Clone {
         let size = self.bounds.size() / 2.0;
 
         let create_child = |pos| {
-            Box::new(Node::new(AABB { min: pos, max: pos + size }, d))
+            // the bounds are slightly expanded to avoid placing too many objects on "edges" (ie parent node)
+            Node::new(AABB { min: pos - vec2(8.0, 8.0), max: pos + size + vec2(8.0, 8.0) }, d)
         };
 
         
         match self.children {
             Some(_) => {},
             None => {
-                self.children = Some([
+                self.children = Some(Box::new([
                     create_child(vec2(self.bounds.pos().x, self.bounds.pos().y + size.y)),
                     create_child(self.bounds.center()),
                     create_child(self.bounds.bottom_left()),
                     create_child(vec2(self.bounds.pos().x + size.x, self.bounds.pos().y)),
-                ]);
+                ]));
             },
         }
 
@@ -103,7 +124,7 @@ impl<T> Node<T> where T: Clone {
 
             match &mut self.children {
                 Some(children) => {
-                    for child in children {
+                    for child in children.iter_mut() {
                         if el.1.is_within_aabb(&child.bounds) {
                             child.insert(&el.0, &el.1, (d, max_depth), true);
                             inserted = true;
@@ -123,7 +144,7 @@ impl<T> Node<T> where T: Clone {
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
         match &mut self.children {
             Some(children) => {
-                for child in children {
+                for child in children.iter_mut() {
                     child.remove_all(to_remove);
                 }
             },
@@ -150,7 +171,7 @@ impl<T> Node<T> where T: Clone {
     fn get_total_recursive(&self, total: &mut usize, depth: u8) {
         *total += self.elements.len();
         if let Some(children) = &self.children {
-            for child in children {
+            for child in children.iter() {
                 child.get_total_recursive(total, depth + 1);
             }
         }
