@@ -3,7 +3,7 @@ use anymap::AnyMap;
 use glam::Vec2;
 use slotmap::{DefaultKey, SlotMap, SparseSecondaryMap};
 use smallvec::SmallVec;
-use crate::{ID, TypedID, physics::{HasBounds, quadtree::{QuadTree}}, shapes::{AABB, CollisionShape}};
+use crate::{ID, TypedID, physics::{HasBounds, dynamictree::DynamicTree, quadtree::QuadTree}, shapes::{AABB, CollisionShape}};
 
 pub(crate) struct PhysicsData {
     pub pos: Vec2,
@@ -73,7 +73,7 @@ pub(crate) struct Physics {
     physics_bodies: SlotMap<slotmap::DefaultKey, PhysicsBody>,
     entities: AnyMap,
 
-    tree: QuadTree<slotmap::DefaultKey>,
+    tree: DynamicTree<slotmap::DefaultKey>,
     to_delete: SparseSecondaryMap<slotmap::DefaultKey, ()>,
 
     tree_bounds: AABB,
@@ -84,7 +84,7 @@ impl Physics {
         Self {
             physics_bodies: SlotMap::new(),
             entities: AnyMap::new(),
-            tree: QuadTree::new(size.size().x, size.size().y, 8),
+            tree: DynamicTree::new(),
             to_delete: SparseSecondaryMap::new(),
             tree_bounds: size,
         }
@@ -143,7 +143,9 @@ impl Physics {
     }
 
     pub fn cleanup(&mut self) {
-        self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 16);
+        //self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 16);
+
+        self.tree.clear();
         //we'll try to calculate the smallest bounds of all the bodies
         let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
@@ -166,7 +168,8 @@ impl Physics {
                 min_bounds.max.y = bounds.max.y;
             }
 
-            self.tree.insert_with_rebalance(id, &bounds);
+            //self.tree.insert_with_rebalance(id, &bounds);
+            self.tree.insert(id, &bounds);
         }
         
         self.to_delete.clear();
@@ -179,11 +182,10 @@ impl Physics {
 
 
     pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 32]>) {
-        let mut q = smallvec::SmallVec::new();
-        self.tree.root.query(bounds, &mut q);
+        let q = self.tree.query(bounds);
 
         let mut passed = 0;
-        for (idx, aabb) in &q {
+        for (idx, aabb) in q {
             if self.to_delete.contains_key(*idx) {continue}
             passed += 1;
             if !bounds.overlaps_aabb(aabb) {continue}

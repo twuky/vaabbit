@@ -56,6 +56,17 @@ impl AABB {
         self.max += vec2(amount, amount);
     }
 
+    pub fn union(&self, other: &AABB) -> Self {
+        Self {
+            min: vec2(self.min.x.min(other.min.x), self.min.y.min(other.min.y)),
+            max: vec2(self.max.x.max(other.max.x), self.max.y.max(other.max.y)),
+        }
+    }
+
+    pub fn perimeter(&self) -> f32 {
+        self.width() + self.height() * 2.0
+    }
+
     pub fn center(&self) -> Vec2 {
         self.min + self.size() / 2.0
     }
@@ -82,6 +93,12 @@ impl AABB {
 
     pub fn height(&self) -> f32 {
         self.max.y - self.min.y
+    }
+}
+
+impl PartialEq for AABB {
+    fn eq(&self, other: &Self) -> bool {
+        self.min == other.min && self.max == other.max
     }
 }
 
