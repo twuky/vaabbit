@@ -16,9 +16,9 @@ impl Bunny {
     }
 }
 
-impl Actor for Bunny {
+impl Actor<()> for Bunny {
     #[inline(always)]
-    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
         let pos = self.move_by(&self.vel, _id, _world);
         
         if pos.x < 0.0 {
@@ -54,7 +54,7 @@ fn main() {
             }
         }
 
-        world.update_systems();
+        world.update_systems(&mut ());
 
         if bunnies % 1000 == 0 { println!("bunnies: {}, ft: {:?}", bunnies, world.logic_update); }
 

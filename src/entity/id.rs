@@ -38,12 +38,6 @@ impl <T: 'static> From<ID<T>> for TypedID {
     }
 }
 
-impl <T: Actor + 'static> Into<ID<T>> for TypedID {
-    fn into(self) -> ID<T> {
-        ID::new(self.index)
-    }
-}
-
 impl Debug for TypedID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TypedID<{:?}> index: {:?}", self.type_id, self.index)
@@ -91,6 +85,7 @@ impl<T> Clone for ID<T> {
         *self = source.clone()
     }
 }
+
 impl <T> Copy for ID<T> {}
 
 impl <T> Eq for ID<T> {

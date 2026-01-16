@@ -18,15 +18,15 @@ struct Block {
 
 }
 
-impl Actor for Block {
-    fn update(&mut self, _id: &ID<Self>, world: &mut World) {
+impl Actor<()> for Block {
+    fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
         let pos = self.pos(_id, world);
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::WHITE);
     }
 }
 
-impl Actor for Coin {
-    fn update(&mut self, _id: &ID<Self>, world: &mut World) {
+impl Actor<()> for Coin {
+    fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
         let pos = self.pos(_id, world);
 
         if self.eaten {return}
@@ -34,9 +34,9 @@ impl Actor for Coin {
     }
 }
 
-impl Actor for Player {
+impl Actor<()> for Player {
 
-    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
 
         let mut vel = vaabbit::Vec2::new(0.0, 0.0);
 
@@ -66,12 +66,12 @@ impl Actor for Player {
                 if coin.eaten {return}
             }
             
-            world.with(&ID::<Coin>::from(other), |coin: &mut Coin| {
+            world.with(&c_id, |coin: &mut Coin| {
                 coin.eaten = true;
                 println!("im eaten!");
             });
             
-            world.with_world(&other.into(), move |_coin: &mut Coin, world| {
+            world.with_world(&c_id, move |_coin: &mut Coin, world| {
                 let random_pos = vaabbit::Vec2::new(rand::gen_range(0.0, 640.0), rand::gen_range(0.0, 480.0));
                 let c_id = world.add_actor(Coin {eaten: false});
                 println!("updating new coin pos: {:?}", c_id);
@@ -130,7 +130,7 @@ async fn main() {
 
 
     loop {
-        world.update_systems();
+        world.update_systems(&mut ());
         next_frame().await;
     }
 }

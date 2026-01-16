@@ -3,17 +3,17 @@ use glam::Vec2;
 
 use crate::{entity::{ID, TypedID}, world::{self, Registry, World}};
 
-pub trait Actor: Send + Sync + 'static {
-    fn update(&mut self, id: &ID<Self>, world: &mut World) where Self: Sized;
+pub trait Actor<P: 'static>: Send + Sync + 'static {
+    fn update(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized;
 
-    fn update_system(world: &mut World) where Self: Sized {
+    fn update_system(world: &mut World, ctx: &mut P) where Self: Sized {
         let entities = Registry::get_entry::<Self>().entities.clone();
 
         for id in entities {
             let entry = Registry::get_mut(&id);
 
             if let Some(actor) = entry {
-                actor.1.update(&actor.0, world);
+                actor.1.update(&actor.0, world, ctx);
                 world.flush_events();
             } else {
                 println!("update(): actor not found: {:?}", id.clone());

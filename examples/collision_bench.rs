@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use vaabbit::{World, Actor, ID, TypedID};
+use vaabbit::{Actor, ID, TypedID, World, world};
 use vibbit::{Color, Vibbit};
 use macroquad::prelude::rand;
 
@@ -20,8 +20,8 @@ impl Rect {
     }
 }
 
-impl Actor for Rect {
-    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
+impl Actor<()> for Rect {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
         self.color = Color::new(255,255,255,255);
         let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _id, _world);
         
@@ -39,6 +39,7 @@ impl Actor for Rect {
         self.color = Color::new(255,0,0,255);
     }
 }
+
 fn main() {
     let mut vib = Vibbit::new(1280, 720, "bunnymark");
     vib.set_target_fps(0.0);
@@ -54,7 +55,7 @@ fn main() {
     }
 
     while !vib.should_close() {
-        world.update_systems();
+        world.update_systems(&mut ());
 
         unsafe {DT = vib.get_delta_time(); }
 

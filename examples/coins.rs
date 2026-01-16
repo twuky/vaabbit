@@ -12,27 +12,31 @@ struct Player {
 struct Coin {
     pos: Vec2,
     eaten: bool,
-    // typed "ID" setup for easy relationships between actors
-    player: Option<ID<Player>>
+    // typed "ID" setup for easy tracking/relationships between actors
+    player_id: Option<ID<Player>>
 }
 
-impl Actor for Coin {
-    fn update(&mut self, _id: &ID<Self>, world: &mut World) {
-        if self.eaten {return}
+impl Actor<()> for Coin {
+    fn update(&mut self, _id: &ID<Self>, world: &mut World, _ctx: &mut ()) {
+        if self.eaten {
+            draw_rectangle(self.pos.x, self.pos.y, 5.0, 5.0, color::GRAY);
+            return
+        }
 
         // we have a typed 'reference' to the player we can access
         // however, it may not be alive, so we unwrap the result of get()
-        if let Some(plyr) = world.get(&self.player.unwrap()) {
+        if let Some(plyr) = world.get(&self.player_id.unwrap()) {
             if self.pos.distance(plyr.pos) < 10.0 {
                 self.eaten = true;
 
                 // we can mutate the player by qeueing an action with it
                 // this will run as soon as this update finishes
-                world.with(&self.player.unwrap(), |player| {
+                world.with(&self.player_id.unwrap(), |player| {
                     player.pos = Vec2::new(rand::gen_range(0.0, 640.0), rand::gen_range(0.0, 480.0));
                 });
 
-                world.emit(self.player.unwrap(), () as CollectEvent);
+                // the player can now broadcast an event, having collected a coin
+                world.emit(self.player_id.unwrap(), () as CollectEvent);
             }
         }
 
@@ -41,9 +45,9 @@ impl Actor for Coin {
 
 }
 
-impl Actor for Player {
+impl Actor<()> for Player {
 
-    fn update(&mut self, _id: &ID<Self>, _world: &mut World) {
+    fn update(&mut self, _id: &ID<Self>, _world: &mut World, _ctx: &mut ()) {
 
         let mut vel = Vec2::new(0.0, 0.0); 
 
@@ -79,11 +83,11 @@ async fn main() {
 
     for _i in 0..10 {
         let random_pos = Vec2::new(rand::gen_range(0.0, 640.0), rand::gen_range(0.0, 480.0));
-        world.add_actor(Coin {pos: random_pos, eaten: false, player: Some(p_id.clone())});
+        world.add_actor(Coin {pos: random_pos, eaten: false, player_id: Some(p_id.clone())});
     }
 
     loop {
-        world.update_systems();
+        world.update_systems(&mut ());
         next_frame().await;
     }
 }

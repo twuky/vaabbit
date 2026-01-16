@@ -1,5 +1,6 @@
 use std::{any::{TypeId, type_name}, cell::OnceCell, hash::Hash, time::{Duration, Instant}};
 
+use anymap::AnyMap;
 use glam::{vec2, Vec2};
 use slotmap::{SlotMap};
 use smallvec::SmallVec;
@@ -115,7 +116,8 @@ static mut EVENT_BUS: EventBus = EventBus::new();
 pub struct World {
     pub registry: Registry,
     pub logic_update: Duration,
-    update_methods: Vec<fn(&mut World)>,
+    //update_methods: Vec<fn(&mut World)>,
+    update_methods_any: AnyMap,
 
     events: EventQueue,
     physics: Physics,
@@ -125,7 +127,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             registry: Registry::new(),
-            update_methods: Vec::new(),
+            //update_methods: Vec::new(),
+            update_methods_any: AnyMap::new(),
             logic_update: Duration::from_millis(16),
             physics: Physics::new(AABB { min: vec2(-2048.0, -2048.0), max: vec2(2048.0, 2048.0) }),
             events: EventQueue::new(),
@@ -157,17 +160,24 @@ impl World {
         self.physics.get_debug_info()
     }
 
-    pub(crate) fn register_type<T: Actor + 'static>(&mut self) {
-        self.update_methods.push(T::update_system);
+    pub(crate) fn register_type<T: Actor<P> + 'static, P: 'static>(&mut self) {
+        //self.update_methods.push(T::update_system);
+        if !self.update_methods_any.contains::<Vec<fn(&mut World, &mut P)>>() {
+            let update_methods: Vec<fn(&mut World, &mut P)> = Vec::new();
+            self.update_methods_any.insert(update_methods);
+        }
+
+        self.update_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>().unwrap().push(T::update_system);
+
         Registry::create_entry::<T>();
         self.physics.register_type::<T>();
     }
 
-    pub fn add_actor<T: Actor + 'static>(&mut self, actor: T) -> ID<T> {
+    pub fn add_actor<T: Actor<P> + 'static, P: 'static>(&mut self, actor: T) -> ID<T> {
         let typeid = TypeId::of::<T>();
         if !self.registry.types.contains(&typeid) {
             self.registry.types.push(typeid);
-            self.register_type::<T>();
+            self.register_type::<T, P>();
         }
         let id = Registry::insert(actor);
 
@@ -181,11 +191,17 @@ impl World {
         id
     }
 
-    pub fn update_systems(&mut self) {
+    pub fn update_systems<P: 'static>(&mut self, ctx: &mut P) {
         let time = Instant::now();
-        let systems = self.update_methods.clone();
-        for system in systems {
-            system(self);
+
+        if let Some(systems) = self.update_methods_any.get::<Vec<fn(&mut World, &mut P)>>() {
+            let runtime_systems = systems.clone();
+            for system in runtime_systems {
+                system(self, ctx);
+            }
+        } else {
+            println!("WARNING: no update methods registered for the generic type {:?}", std::any::type_name::<P>());
+            panic!("Please make sure the argument passed into update_systems(), \"{}\",is the same as the generic type of the actor structs", std::any::type_name::<P>());
         }
 
         self.physics.cleanup();
@@ -203,7 +219,7 @@ impl World {
         }
     }
 
-    pub fn set_pos<T: 'static + Actor>(&mut self, id: ID<T>, pos: Vec2) {
+    pub fn set_pos<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, pos: Vec2) {
         let body = self.physics.get_body(&id).unwrap();
         
         let new_body = match body {
@@ -245,7 +261,7 @@ impl World {
         }
     }
 
-    pub fn move_by<T: 'static + Actor>(&mut self, id: ID<T>, delta: &Vec2) -> Vec2 {
+    pub fn move_by<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, delta: &Vec2) -> Vec2 {
         let body = self.physics.get_body(&id).unwrap();
         let new_pos = match body {
             PhysicsBody::Actor(data) => data.pos + *delta,
