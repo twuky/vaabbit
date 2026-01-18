@@ -65,6 +65,8 @@ pub trait Shape {
     fn edges(&self) -> Option<Vec<Edge>>;
     fn vertices(&self) -> Option<Vec<Vec2>>;
 
+    fn translate(&mut self, offset: Vec2);
+
     fn bounds(&self) -> AABB;
     
     fn as_collision_shape(&self) -> CollisionShape;

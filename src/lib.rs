@@ -12,3 +12,7 @@ pub use events::Signal;
 pub fn type_of<T: 'static>() -> std::any::TypeId {
     std::any::TypeId::of::<T>()
 }
+
+pub fn init() -> World {
+    World::new()
+}

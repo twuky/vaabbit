@@ -144,7 +144,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         // updating positions of objects without needing to
         // rebalance the tree
         let mut expanded_bounds = bounds.clone();
-        //expanded_bounds.expand(32.0);
+        expanded_bounds.expand(0.0);
 
         let leaf = Node::new_leaf(expanded_bounds, None, data);
         let leaf_index = self.nodes.insert(leaf);

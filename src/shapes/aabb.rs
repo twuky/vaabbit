@@ -115,6 +115,11 @@ impl Shape for AABB {
         *self
     }
 
+    fn translate(&mut self, offset: Vec2) {
+        self.min += offset;
+        self.max += offset;
+    }
+
     #[inline(always)]
     fn overlaps_point(&self, point: Vec2) -> bool {
         point.x >= self.min.x && 

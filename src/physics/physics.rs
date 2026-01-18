@@ -5,6 +5,7 @@ use slotmap::{DefaultKey, SlotMap, SparseSecondaryMap};
 use smallvec::SmallVec;
 use crate::{ID, TypedID, physics::{HasBounds, dynamictree::DynamicTree, quadtree::QuadTree}, shapes::{AABB, CollisionShape}};
 
+#[derive(Clone)]
 pub(crate) struct PhysicsData {
     pub pos: Vec2,
     pub body: Option<CollisionShape>,
@@ -12,6 +13,7 @@ pub(crate) struct PhysicsData {
     pub id: TypedID,
 }
 
+#[derive(Clone)]
 pub(crate) enum PhysicsBody {
     Actor(PhysicsData),
     Solid(PhysicsData),
@@ -121,9 +123,17 @@ impl Physics {
     
     pub fn update_body<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
         let bounds = body.bounds();
-        let new_idx = self.physics_bodies.insert(body);
-
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
+
+        // early exit test. our tree contains "fat" bounding boxes, so if movement is small,
+        // we dont need to rebalance the tree
+        if self.tree.try_update_body(bounds, *entry.body_indices.get(id.index).unwrap()) {
+            self.physics_bodies.get_mut(*entry.body_indices.get(id.index).unwrap()).unwrap().clone_from(&body);
+            return;
+        }
+
+        let new_idx = self.physics_bodies.insert(body);
+        
         let old_entry = entry.body_indices.insert(id.index, new_idx);
 
         self.tree.insert(new_idx, &bounds);
@@ -132,6 +142,7 @@ impl Physics {
             self.to_delete.insert(old_idx, ());
             self.physics_bodies.remove(old_idx);
         }
+        
     }
 
     pub fn delete_body<T: 'static>(&mut self, id: &ID<T>) {
@@ -188,8 +199,7 @@ impl Physics {
         for (idx, aabb) in q {
             if self.to_delete.contains_key(*idx) {continue}
             passed += 1;
-            if !bounds.overlaps_aabb(aabb) {continue}
-            
+            // if !bounds.overlaps_aabb(aabb) {continue}
 
             match self.physics_bodies.get(*idx) {
                 Some(body) => {

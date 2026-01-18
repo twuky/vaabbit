@@ -1,9 +1,9 @@
 use std::any::TypeId;
 use glam::Vec2;
 
-use crate::{entity::{ID, TypedID}, world::{self, Registry, World}};
+use crate::{entity::{ID, TypedID}, world::{Registry, World}};
 
-pub trait Actor<P: 'static>: Send + Sync + 'static {
+pub trait Actor<P: 'static> where Self: 'static {
     fn update(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized;
 
     fn update_system(world: &mut World, ctx: &mut P) where Self: Sized {
