@@ -3,17 +3,64 @@ use glam::{vec2, Vec2};
 use smallvec::{smallvec, SmallVec};
 use crate::shapes::{self, AABB};
 
-type Index = slotmap::DefaultKey;
+type TreeIndex = slotmap::DefaultKey;
+type UserDataIndex = slotmap::DefaultKey;
 
-// size = 48 (0x30), align = 0x4, no Drop
-type SlotmapNode = Node<Index>;
+struct Branch {
+    pub bounds: AABB,
+    pub parent: Option<TreeIndex>,
+
+    pub child_1: Option<TreeIndex>,
+    pub child_2: Option<TreeIndex>,
+}
+
+struct Leaf<T> {
+    // bounds containing expanded AABB
+    pub bounds: AABB,
+    // real bounds of the object - updated when position changes
+    pub true_bounds: AABB,
+    pub parent: TreeIndex,
+    pub data: T,
+}
+
+enum TreeNode {
+    Leaf(Leaf<TreeIndex>),
+    Branch(Branch)
+}
+
+impl TreeNode {
+    fn is_leaf(&self) -> bool {
+        match self {
+            TreeNode::Leaf(_) => true,
+            TreeNode::Branch(_) => false,
+        }
+    }
+
+    fn new_leaf(bounds: AABB, parent: TreeIndex, data: TreeIndex) -> Self {
+        TreeNode::Leaf(Leaf {
+            bounds,
+            true_bounds: bounds,
+            parent,
+            data,
+        })
+    }
+
+    fn new_branch(bounds: AABB, parent: TreeIndex, child_1: TreeIndex, child_2: TreeIndex) -> Self {
+        TreeNode::Branch(Branch {
+            bounds,
+            parent: Some(parent),
+            child_1: Some(child_1),
+            child_2: Some(child_2),
+        })
+    }
+}
 
 pub struct Node<T> {
     pub bounds: AABB,
-    pub parent: Option<Index>,
+    pub parent: Option<TreeIndex>,
 
-    pub child_1: Option<Index>,
-    pub child_2: Option<Index>,
+    pub child_1: Option<TreeIndex>,
+    pub child_2: Option<TreeIndex>,
 
     pub data: Option<T>,
 }
@@ -29,7 +76,7 @@ impl<T> Node<T> {
         }
     }
 
-    pub fn new_leaf(bounds: AABB, parent: Option<Index>, data: T) -> Self {
+    pub fn new_leaf(bounds: AABB, parent: Option<TreeIndex>, data: T) -> Self {
         Self {
             bounds,
             parent: parent,
@@ -45,33 +92,32 @@ impl<T> Node<T> {
 }
 
 pub struct DynamicTree<T> {
-    pub root: Option<Index>,
-    pub nodes: slotmap::SlotMap<slotmap::DefaultKey, Node<T>>,
+    pub root: TreeIndex,
+    pub nodes: slotmap::SlotMap<TreeIndex, Node<T>>,
 }
 
 impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
     pub fn new() -> Self {
+        let mut nodes = slotmap::SlotMap::new();
+        let leaf = Node::<T>::new(AABB {min: Vec2::ZERO, max: Vec2::ZERO});
+        let root = nodes.insert(leaf);
         Self {
-            root: None,
-            nodes: slotmap::SlotMap::new(),
+            root,
+            nodes,
         }
     }
 
     pub fn clear(&mut self) {
-        self.root = None;
         self.nodes.clear();
+        let leaf = Node::<T>::new(AABB {min: Vec2::ZERO, max: Vec2::ZERO});
+        self.root = self.nodes.insert(leaf);
     }
 
     pub fn query(&self, bounds: &AABB) -> SmallVec<[(&T, &AABB); 32]> {
         let mut out = smallvec![];
 
-        // if empty tree
-        let Some(root) = self.root else {
-            return out;
-        };
-
-        let mut stack = SmallVec::<[&Index; 64]>::new();
-        stack.push(&root);
+        let mut stack = SmallVec::<[&TreeIndex; 64]>::new();
+        stack.push(&self.root);
 
         while let Some(index) = stack.pop() {
             let node = &self.nodes.get(*index).unwrap();
@@ -101,13 +147,9 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
 
     // returns true if the update would not require a rebalance of the tree
     pub fn try_update_body(&mut self, bounds: AABB, data: T) -> bool {
-        // if empty tree
-        let Some(root) = self.root else {
-            return false;
-        };
 
-        let mut stack = SmallVec::<[&Index; 64]>::new();
-        stack.push(&root);
+        let mut stack = SmallVec::<[&TreeIndex; 64]>::new();
+        stack.push(&self.root);
 
         while let Some(index) = stack.pop() {
             let node = &self.nodes.get(*index).unwrap();
@@ -149,11 +191,6 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         let leaf = Node::new_leaf(expanded_bounds, None, data);
         let leaf_index = self.nodes.insert(leaf);
 
-        if self.root.is_none() {
-            self.root = Some(leaf_index);
-            return;
-        }
-
         let best_sibling_index = self.find_best_sibling(&expanded_bounds);
         let sibling = self.nodes.get(best_sibling_index).unwrap();
         let old_parent = sibling.parent;
@@ -180,15 +217,15 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
                 }
             }
             None => {
-                self.root = Some(new_parent_index);
+                self.root = new_parent_index;
             }
         }
 
         self.fix_upwards(old_parent);
     }
 
-    fn find_best_sibling(&self, leaf_bounds: &AABB) -> Index {
-        let mut index = self.root.unwrap();
+    fn find_best_sibling(&self, leaf_bounds: &AABB) -> TreeIndex {
+        let mut index = self.root;
 
         loop {
             let search = self.nodes.get(index).unwrap();
@@ -210,7 +247,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         }
     }
 
-    fn fix_upwards(&mut self, mut index: Option<Index>) {
+    fn fix_upwards(&mut self, mut index: Option<TreeIndex>) {
         while let Some(i) = index {
             let (c1, c2) = {
                 let n = &self.nodes.get(i).unwrap();
@@ -231,13 +268,8 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
     pub fn get_debug_info(&self) -> Vec<(usize, AABB)> {
         let mut out = vec![];
 
-        // if empty tree
-        let Some(root) = self.root else {
-            return out;
-        };
-
-        let mut stack = SmallVec::<[&Index; 64]>::new();
-        stack.push(&root);
+        let mut stack = SmallVec::<[&TreeIndex; 64]>::new();
+        stack.push(&self.root);
 
         let mut depth = 0;
         while let Some(index) = stack.pop() {
