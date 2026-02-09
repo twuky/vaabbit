@@ -5,13 +5,12 @@ use crate::shapes::{self, AABB};
 const MAX_ELEMENTS: usize = 16;
 
 pub struct Node<T> {
-    pub node_bounds: AABB,                      // 16 bytes
-    pub children: Option<Box<[Node<T>; 4]>>,  // 4 * 8 bytes = 32 bytes
-    pub elements: SmallVec<[(T, AABB); 32]>,      // 24 bytes
-    
+    pub node_bounds: AABB,
+    pub children: Option<Box<[Node<T>; 4]>>,
+    pub elements: SmallVec<[(T, AABB); 16]>,
 }
 
-impl<T> Node<T> where T: Clone {
+impl<T> Node<T> where T: Copy {
     pub fn new(bounds: AABB, _depth: u8) -> Self {
         Self {
             node_bounds: bounds,
@@ -42,8 +41,9 @@ impl<T> Node<T> where T: Clone {
         }
     }
 
-    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
-        let mut stack = SmallVec::<[&Node<T>; 64]>::new();
+    #[inline(always)]
+    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 16]>) {
+        let mut stack = SmallVec::<[&Node<T>; 32]>::new();
         stack.push(self);
 
         while let Some(node) = stack.pop() {
@@ -55,30 +55,22 @@ impl<T> Node<T> where T: Clone {
                 }
             }
 
-            out.extend(&node.elements);
+            for e in &node.elements {
+                if bounds.overlaps_aabb(&e.1) {
+                    out.push(e);
+                }
+            }
+           // out.extend(&node.elements);
         }
-    }
-
-    fn query_recursive<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
-        match &self.children {
-            Some(children) => {
-                for child in children.iter() {
-                    if bounds.overlaps_aabb(&child.node_bounds) {
-                        child.query_recursive(bounds, out);
-                    }
-                };
-            },
-            None => {}
-        }
-
-        out.extend(&self.elements);
     }
 
     pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         match &mut self.children {
             Some(children) => {
                 for child in children.iter_mut() {
-                    if bounds.is_within_aabb(&child.node_bounds) {
+                    let mut expanded = child.node_bounds;
+                    expanded.expand(32.0);
+                    if bounds.is_within_aabb(&expanded) {
                         child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
                         return;
                     }
@@ -88,7 +80,7 @@ impl<T> Node<T> where T: Clone {
         };
 
         // as a last resort, it is outside the tree, so this should be the root
-        self.elements.push((data.clone(), *bounds));
+        self.elements.push((*data, *bounds));
 
         if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
@@ -100,8 +92,7 @@ impl<T> Node<T> where T: Clone {
         let size = self.node_bounds.size() / 2.0;
 
         let create_child = |pos| {
-            // the bounds are slightly expanded to avoid placing too many objects on "edges" (ie parent node)
-            Node::new(AABB { min: pos - vec2(8.0, 8.0), max: pos + size + vec2(8.0, 8.0) }, d)
+            Node::new(AABB { min: pos, max: pos + size }, d)
         };
 
         
@@ -183,7 +174,7 @@ pub struct QuadTree<T> {
     max_depth: u8,
 }
 
-impl<T: Clone> QuadTree<T> {
+impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
     pub fn new(width: f32, height: f32, max_depth: u8) -> Self {
         let bounds = AABB {
             min: Vec2::new(-width, -height) * 1.5,
@@ -195,17 +186,10 @@ impl<T: Clone> QuadTree<T> {
         }
     }
 
-    pub fn query(&self, bounds: &AABB) -> SmallVec<[&(T, AABB); 32]> {
+    pub fn query(&self, bounds: &AABB) -> SmallVec<[&(T, AABB); 16]> {
         let mut out = smallvec![];
-        let mut out_filtered: SmallVec<[&(T, AABB); 32]> = smallvec![];
         self.root.query(bounds, &mut out);
-        for item in out.drain(..) {
-            {if !bounds.overlaps_aabb(&item.1) {
-                continue;
-            }}
-            out_filtered.push(item);
-        }
-        out_filtered
+        out
     }
 
     pub fn len(&self) -> usize {

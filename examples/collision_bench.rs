@@ -2,27 +2,24 @@ use std::time::SystemTime;
 
 use vaabbit::{Actor, ID, TypedID, World, world};
 use vibbit::{Color, Vibbit};
-use macroquad::prelude::rand;
+use macroquad::{color, prelude::rand};
 
 static mut DT : f32 = 0.0;
 
 struct Rect {
     vel: glam::Vec2,
-    color: Color,
 }
 
 impl Rect {
     fn new() -> Self {
         Self {
             vel: glam::Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)),
-            color: Color::new(255,255,255,255),
         }
     }
 }
 
 impl Actor<()> for Rect {
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
-        self.color = Color::new(255,255,255,255);
         let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _id, _world);
         
         if pos.x < 0.0 || pos.x > 1280.0 - 32.0 {
@@ -34,9 +31,7 @@ impl Actor<()> for Rect {
     }
 
     fn on_collision(&mut self, _id: &ID<Self>, _other: TypedID, _world: &mut World) {
-        // println!("collision");
         self.vel *= -1.0;
-        self.color = Color::new(255,0,0,255);
     }
 }
 
@@ -53,17 +48,24 @@ fn main() {
         let id = world.add_actor(Rect::new());
         world.set_pos(id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
     }
+    let font = vib.default_font();
 
     while !vib.should_close() {
         world.update_systems(&mut ());
 
         unsafe {DT = vib.get_delta_time(); }
 
-        vib.clear_screen(Color::new(0,0,0,255));
+        vib.clear_screen(Color::new(64,64,64,255));
 
         for (_id, rect) in world.query_id::<Rect>() {
             let pos = world.get_pos(_id);
-            vib.draw_rect(vibbit::Vec2::new(pos.x, pos.y) + offset, 32.0, 32.0, rect.color);
+            let mut color = Color::new(255,255,255,255);
+            let collided = rect.get_colliding_bodies(_id, &world).len();
+            if collided > 0 {
+                color = Color::new(255,0,0,255);
+            }
+            vib.draw_rect(vibbit::Vec2::new(pos.x, pos.y) + offset, 32.0, 32.0, color);
+            //vib.draw_text(&font, pos.x + offset.x, pos.y + offset.y, Color::new(0,0,0,255), &format!("{}", rect.collided), 1.0);
         }
 
         vib.end_frame();

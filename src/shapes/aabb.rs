@@ -7,7 +7,10 @@ pub struct AABB {
     pub max: Vec2
 }
 
+
+
 impl AABB {
+    pub const ZERO: AABB = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
@@ -56,10 +59,11 @@ impl AABB {
         self.max += vec2(amount, amount);
     }
 
-    pub fn union(&self, other: &AABB) -> Self {
+    #[inline(always)]
+    pub fn union(&self, other: AABB) -> Self {
         Self {
-            min: vec2(self.min.x.min(other.min.x), self.min.y.min(other.min.y)),
-            max: vec2(self.max.x.max(other.max.x), self.max.y.max(other.max.y)),
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
         }
     }
 
@@ -103,8 +107,8 @@ impl PartialEq for AABB {
 }
 
 impl Shape for AABB {
-    fn as_collision_shape(&self) -> CollisionShape {
-        CollisionShape::AABB(*self)
+    fn as_collision_shape(&self) -> Collider {
+        Collider::AABB(*self)
     }
 
     fn centroid(&self) -> Vec2 {
@@ -116,8 +120,14 @@ impl Shape for AABB {
     }
 
     fn translate(&mut self, offset: Vec2) {
-        self.min += offset;
-        self.max += offset;
+        self.min = self.min + offset;
+        self.max = self.max + offset;
+    }
+
+    fn set_pos(&mut self, pos: Vec2) {
+        let w_h = vec2(self.width(), self.height());
+        self.min = pos;
+        self.max = pos + w_h;
     }
 
     #[inline(always)]

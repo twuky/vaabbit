@@ -57,7 +57,12 @@ impl Actor<()> for Player {
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::RED);
     }
 
+    fn on_collision_end<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+        println!("player left coin area")
+    }
+
     fn on_collision(&mut self, id: &ID<Self>, other: TypedID, world: &mut World) {
+        println!("player enter coin area");
         // Can detect the type of the colliding object
         // with the is() method
         if let Some(c_id) = other.is::<Coin>() {

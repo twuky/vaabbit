@@ -42,7 +42,6 @@ impl Actor<()> for Coin {
 
         draw_rectangle(self.pos.x, self.pos.y, 5.0, 5.0, color::YELLOW);
     }
-
 }
 
 impl Actor<()> for Player {

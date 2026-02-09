@@ -8,7 +8,7 @@ pub struct ID<T: ?Sized> {
     pub _type: std::marker::PhantomData<T>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, Hash)]
 pub struct TypedID {
     pub index: slotmap::DefaultKey,
     pub type_id: TypeId,
@@ -44,6 +44,12 @@ impl Debug for TypedID {
     }
 }
 
+impl PartialEq for TypedID {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && self.type_id == other.type_id
+    }
+}
+
 impl<T: 'static> ID<T> {
     pub fn new(index: slotmap::DefaultKey) -> Self {
         Self {
@@ -70,6 +76,13 @@ impl<T: 'static> ID<T> {
     }
     pub fn type_name(&self) -> &'static str {
         std::any::type_name::<T>()
+    }
+
+    pub fn into_typed_id(self) -> TypedID {
+        TypedID {
+            index: self.index,
+            type_id: TypeId::of::<T>(),
+        }
     }
 }
 

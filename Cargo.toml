@@ -10,12 +10,13 @@ debug = true
 
 [profile.dev.package."*"]
 opt-level = 3
-debug = true
+debug = false
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
+debug = false
 
 [profile.release.package."*"]
 opt-level = 3

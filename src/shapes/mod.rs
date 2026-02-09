@@ -5,40 +5,12 @@ mod aabb;
 mod circle;
 mod solve;
 mod aabb_i32;
+mod collider;
 
 pub use aabb::AABB;
 pub use circle::Circle;
 pub use aabb_i32::AABBI32;
-
-#[derive(Debug, Clone, Copy)]
-pub enum CollisionShape {
-    AABB(AABB),
-    CIRCLE(Circle)
-}
-
-impl CollisionShape {
-    pub fn bounds(&self) -> AABB {
-        match self {
-            CollisionShape::AABB(shape) => shape.bounds(),
-            CollisionShape::CIRCLE(shape) => shape.bounds(),
-        }
-    }
-
-    pub fn overlaps(&self, other: &CollisionShape) -> bool {
-        match (self, other) {
-            (CollisionShape::AABB(a), CollisionShape::AABB(b)) => a.overlaps_aabb(b),
-            (CollisionShape::CIRCLE(a), CollisionShape::CIRCLE(b)) => a.overlaps_circle(b),
-            _ => false
-        }
-    }
-
-    pub fn overlaps_aabb(&self, other: &AABB) -> bool {
-        match self {
-            CollisionShape::AABB(a) => a.overlaps_aabb(other),
-            CollisionShape::CIRCLE(a) => a.overlaps(other),
-        }
-    }
-}
+pub use collider::Collider;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Edge {
@@ -66,10 +38,11 @@ pub trait Shape {
     fn vertices(&self) -> Option<Vec<Vec2>>;
 
     fn translate(&mut self, offset: Vec2);
+    fn set_pos(&mut self, pos: Vec2);
 
     fn bounds(&self) -> AABB;
     
-    fn as_collision_shape(&self) -> CollisionShape;
+    fn as_collision_shape(&self) -> Collider;
 
     fn overlaps_point(&self, point: Vec2) -> bool;
     fn overlaps_edge(&self, edge: Edge) -> bool;
@@ -90,8 +63,8 @@ pub trait Shape {
     fn overlaps<T: Shape>(&self, other: &T) -> bool {
         let other_shape = other.as_collision_shape();
         match other_shape {
-            CollisionShape::AABB(o) => self.overlaps_polygon(&o),
-            CollisionShape::CIRCLE(o) => self.overlaps_circle(&o),
+            Collider::AABB(o) => self.overlaps_polygon(&o),
+            Collider::CIRCLE(o) => self.overlaps_circle(&o),
         }
     }
 }
