@@ -1,6 +1,7 @@
 use std::time::SystemTime;
 
-use vaabbit::{Actor, ID, TypedID, World, world};
+use glam::Vec2;
+use vaabbit::{Actor, ID, TypedID, World, physics::PhysicsClass, shapes::{AABB, Collider}, world};
 use vibbit::{Color, Vibbit};
 use macroquad::{color, prelude::rand};
 
@@ -19,6 +20,11 @@ impl Rect {
 }
 
 impl Actor<()> for Rect {
+
+    fn init_physicsbody(id:TypedID) -> vaabbit::physics::PhysicsBody where Self: Sized {
+        vaabbit::physics::PhysicsBody::new(Vec2::ZERO, Some(Collider::AABB(AABB { min: Vec2::ZERO, max: glam::Vec2::new(32.0, 32.0)})), id, PhysicsClass::Actor)
+    }
+
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
         let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _id, _world);
         
@@ -42,7 +48,7 @@ fn main() {
 
     rand::srand(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64);
 
-    let offset = vibbit::Vec2::new(-640.0, -360.0);
+    let offset = glam::Vec2::new(-640.0, -360.0);
 
     for _ in 0..500 {
         let id = world.add_actor(Rect::new());
@@ -64,7 +70,7 @@ fn main() {
             if collided > 0 {
                 color = Color::new(255,0,0,255);
             }
-            vib.draw_rect(vibbit::Vec2::new(pos.x, pos.y) + offset, 32.0, 32.0, color);
+            vib.draw_rect(pos + offset, 32.0, 32.0, color);
             //vib.draw_text(&font, pos.x + offset.x, pos.y + offset.y, Color::new(0,0,0,255), &format!("{}", rect.collided), 1.0);
         }
 

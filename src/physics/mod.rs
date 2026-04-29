@@ -4,7 +4,6 @@ pub mod dynamictree;
 mod physicsbody;
 
 pub(crate) use physics::{Physics};
-pub(crate) use quadtree::QuadTree;
 pub use physicsbody::PhysicsBody;
 pub use physicsbody::PhysicsClass;
 

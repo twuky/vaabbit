@@ -1,14 +1,14 @@
 use std::any::TypeId;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use anymap::AnyMap;
 use glam::{Vec2, vec2};
 use smallvec::SmallVec;
 
-use crate::events::{self, EventBus, EventQueue};
-use crate::physics::{HasBounds, Physics, PhysicsBody, PhysicsClass};
-use crate::shapes::{AABB, Collider};
+use crate::events::{EventBus, EventQueue};
+use crate::physics::{Physics, PhysicsBody};
+use crate::shapes::AABB;
 use crate::entity::{Actor, ID};
 use crate::world::registry::Registry;
 pub struct World {
@@ -20,6 +20,13 @@ pub struct World {
 
     events: EventQueue,
     pub(crate)physics: Physics,
+    singletons: AnyMap,
+}
+
+impl Default for World {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl World {
@@ -31,6 +38,7 @@ impl World {
             physics: Physics::new(AABB { min: vec2(-2048.0, -2048.0), max: vec2(2048.0, 2048.0) }),
             event_bus: RefCell::new(EventBus::new()),
             events: EventQueue::new(),
+            singletons: AnyMap::new(),
         }
     }
 
@@ -60,9 +68,9 @@ impl World {
 
     pub(crate) fn register_type<T: Actor<P> + 'static, P: 'static>(&mut self) {
         //self.update_methods.push(T::update_system);
-        println!("INFO: registering update generic type {:?}", std::any::type_name::<P>());
+        println!("INFO: registering update<{:?}> for {:?}", std::any::type_name::<P>(), std::any::type_name::<T>());
         if !self.update_methods_any.contains::<Vec<fn(&mut World, &mut P)>>() {
-            let update_methods: Vec<fn(&mut World, &mut P)> = Vec::new();
+            let update_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
             self.update_methods_any.insert(update_methods);
         }
 
@@ -75,23 +83,49 @@ impl World {
     pub fn add_actor<T: Actor<P> + 'static, P: 'static>(&mut self, actor: T) -> ID<T> {
         let typeid = TypeId::of::<T>();
         if !self.registry.types.contains(&typeid) {
-            self.registry.types.push(typeid);
+            self.registry.types.insert(typeid);
             self.register_type::<T, P>();
         }
-        let id = Registry::insert(actor);
 
-        let body = PhysicsBody::new(Vec2::ZERO, Some(Collider::AABB(AABB { min: Vec2::ZERO, max: vec2(32.0, 32.0)})), id.into(), PhysicsClass::Actor);
+        let id = Registry::insert_actor(actor);
+        let typed_id = id.into_typed_id();
+
+        // generate default physics body for type
+        let mut body = T::init_physicsbody(typed_id);
+        // updates internal posision of physics shape based on the actor's position
+        body.set_pos(&body.pos());
+
+
         self.physics.add_body(&id, body);
 
         id
     }
 
+    pub fn remove_actor<T: Actor<P> + 'static, P: 'static>(&mut self, id: &ID<T>) {
+        let id = *id;
+        self.with_world(&id, move |_ett, world| {
+            // lifecycle: removal
+            // ett.on_remove(id, world);
+
+            // remove from events system
+
+            // remove from actor registry
+            let actor = Registry::remove_actor(&id);
+
+            // remove from physics
+            world.physics.delete_body(&id);
+
+            if actor.is_some() {
+                world.registry.recently_removed.insert(id.into_typed_id());
+            }
+        });
+    }
+
     pub fn update_systems<P: 'static>(&mut self, ctx: &mut P) {
         let time = Instant::now();
 
-        if let Some(systems) = self.update_methods_any.get::<Vec<fn(&mut World, &mut P)>>() {
-            let runtime_systems = systems.clone();
-            for system in runtime_systems {
+        if let Some(systems) = self.update_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>() {
+            for system in systems.clone() {
                 system(self, ctx);
             }
         } else {
@@ -100,14 +134,18 @@ impl World {
         }
 
         self.physics.cleanup();
+        self.registry.recently_removed.clear();
         self.logic_update = time.elapsed();
     }
 
+    #[inline(always)]
     pub fn get_pos<T: 'static>(&self, id: &ID<T>) -> Vec2 {
-        if let Some(body) = self.physics.get_body(id) {
-            return body.pos();
-        }
-        Vec2::ZERO
+        self.physics.get_body_pos(id).unwrap_or(Vec2::ZERO)
+    }
+
+    #[inline(always)]
+    pub fn get_physics_body<T: 'static>(&self, id: &ID<T>) -> Option<&PhysicsBody> {
+        self.physics.get_body(id)
     }
 
     pub fn set_pos<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, pos: Vec2) {
@@ -131,7 +169,7 @@ impl World {
         
         for collided in query {
             // near phase collision
-            if new_body.overlaps(&collided) {
+            if new_body.overlaps(collided) {
                 let other_id = collided.id;
                 self.with_world(&id, move |ett, world| {
                     ett.on_collision(&id, other_id, world);
@@ -161,9 +199,9 @@ impl World {
 
         let overlap_list = self.physics.get_overlap_list(&id);
         // new objects we are overlapping with after movement
-        let mut new_overlaps = Vec::new();
+        let mut new_overlaps = Vec::with_capacity(2);
         // objects we are no longer overlapping with after movement
-        let mut overlap_exits = Vec::new();
+        let mut overlap_exits = Vec::with_capacity(2);
 
         // any IDs that are in the overlap list but not in the query are no longer overlapping
         for ov_id in overlap_list {
@@ -176,7 +214,7 @@ impl World {
         for collided in query {
             if overlap_list.contains(&collided.id) { continue; }
             // near phase collision
-            if new_body.overlaps(&collided) {
+            if new_body.overlaps(collided) {
                 let other_id = collided.id;
                 new_overlaps.push(other_id);
                 self.with_world(&id, move |ett, world| {
@@ -191,14 +229,14 @@ impl World {
 
         // lifecycle: collision end
         for other_id in &overlap_exits {
-            let o_id = other_id.clone();
+            let o_id = *other_id;
             self.with_world(&id, move |ett, world| {
                 ett.on_collision_end(&id, o_id, world);
             });
             self.physics.add_late_collision_exit(*other_id, id.into_typed_id());
         }
 
-        self.physics.update_overlap_list(&id, new_overlaps, overlap_exits);
+        self.physics.update_overlap_list(&id, &new_overlaps, &overlap_exits);
 
         new_pos
     }
@@ -217,8 +255,11 @@ impl World {
         Some(&mut Registry::get_mut(id)?.1)
     }
 
+    /**
+    Queues an action to be executed on the given entity, with mutable access to the entity.
+    */
     pub fn with<T: 'static>(&self, id: &ID<T>, f: impl Fn(&mut T) + 'static) {
-        let id = id.clone();
+        let id = *id;
         let closure = move |_world: &mut World| {
             let entry = Registry::get_mut(&id);
             if let Some(entity) = entry {
@@ -232,14 +273,20 @@ impl World {
         self.event_bus.borrow_mut().push(Box::new(closure));
     }
 
+    /**
+    Queues an action to be executed on the given entity, with mutable access to the entity and the world.
+    */ 
     pub fn with_world<T: 'static>(&self, id: &ID<T>, f: impl Fn(&mut T, &mut World) + 'static) {
-        let id = id.clone();
+        let id = *id;
         let closure = move |world: &mut World| {
             let entry = Registry::get_mut(&id);
 
             if let Some(entity) = entry {
                 f(&mut entity.1, world);
             } else {
+                if world.registry.recently_removed.contains(&id.into_typed_id()) {
+                    return; // skip error message
+                }
                 println!("with_world(entity) not found: {:?}", id.clone());
                 println!("perhaps already in use?");
             }
@@ -262,6 +309,14 @@ impl World {
 
     pub fn query_id_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut (ID<T>,T)> + use<'_, T> {
         Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| item)
+    }
+
+    pub fn get_singleton<T: 'static>(&self) -> Option<&T> {
+        self.singletons.get::<T>()
+    }
+
+    pub fn set_singleton<T: 'static>(&mut self, value: T) -> Option<T> {
+        self.singletons.insert(value)
     }
 
     pub(crate) fn flush_events(&mut self) {

@@ -16,7 +16,7 @@ pub fn overlaps_edge_edge(a: &Edge, b: &Edge) -> bool {
     let t = ca.perp_dot(cd) / denominator;
     let u = ca.perp_dot(ab) / denominator;
 
-    t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0
+    (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)
 }
 
 pub fn overlaps_edge_circle(a: &Edge, b: &Circle) -> bool {
@@ -93,7 +93,7 @@ pub fn overlaps_poly_poly(a: &impl Shape, b: &impl Shape) -> bool {
 pub fn overlaps_poly_circle(a: &impl Shape, b: &Circle) -> bool {
     if let Some(edges) = a.edges() {
         for edge in edges {
-            if edge.overlaps_circle(&b) { return true }
+            if edge.overlaps_circle(b) { return true }
         }
     }
     

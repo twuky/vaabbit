@@ -16,6 +16,10 @@ impl AABB {
         Self { min, max }
     }
 
+    pub fn from_size(size: Vec2) -> Self {
+        Self { min: Vec2::ZERO, max: size }
+    }
+
     pub fn from_pos_size(pos: Vec2, size: Vec2) -> Self {
         Self { min: pos, max: pos + size }
     }
@@ -30,10 +34,10 @@ impl AABB {
 
     #[inline(always)]
     pub fn overlaps_aabb(&self, other: &AABB) -> bool {
-        self.min.x <= other.max.x &&
-        self.max.x >= other.min.x &&
-        self.min.y <= other.max.y &&
-        self.max.y >= other.min.y
+        self.min.x < other.max.x &&
+        self.max.x > other.min.x &&
+        self.min.y < other.max.y &&
+        self.max.y > other.min.y
     }
 
     pub fn pos(&self) -> Vec2 {
@@ -54,21 +58,28 @@ impl AABB {
         other.point_within_bounds(self.max)
     }
 
+    #[inline(always)]
     pub fn expand(&mut self, amount: f32) {
         self.min -= vec2(amount, amount);
         self.max += vec2(amount, amount);
     }
 
     #[inline(always)]
-    pub fn union(&self, other: AABB) -> Self {
+    pub fn union(self, other: AABB) -> Self {
         Self {
             min: self.min.min(other.min),
             max: self.max.max(other.max),
         }
     }
 
+    #[inline(always)]
     pub fn perimeter(&self) -> f32 {
         self.width() + self.height() * 2.0
+    }
+
+    #[inline(always)]
+    pub fn inseam(&self) -> f32 {
+        self.width() + self.height()
     }
 
     pub fn center(&self) -> Vec2 {
@@ -120,8 +131,8 @@ impl Shape for AABB {
     }
 
     fn translate(&mut self, offset: Vec2) {
-        self.min = self.min + offset;
-        self.max = self.max + offset;
+        self.min += offset;
+        self.max += offset;
     }
 
     fn set_pos(&mut self, pos: Vec2) {
@@ -147,7 +158,7 @@ impl Shape for AABB {
     }
     
     fn overlaps_circle(&self, other: &Circle) -> bool {
-        super::solve::overlaps_poly_circle(self, &other)
+        super::solve::overlaps_poly_circle(self, other)
     }
 
     fn edges(&self) -> Option<Vec<Edge>> {
@@ -159,7 +170,7 @@ impl Shape for AABB {
         );
 
         Some(vec![
-            Edge {a: a, b: b},
+            Edge {a, b},
             Edge {a: b, b: c},
             Edge {a: c, b: d},
             Edge {a: d, b: a},

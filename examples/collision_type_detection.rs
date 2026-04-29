@@ -27,10 +27,19 @@ impl Actor<()> for Block {
 
 impl Actor<()> for Coin {
     fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
+        self.move_by(&(0.0, 0.0).into(), _id, world);
         let pos = self.pos(_id, world);
 
         if self.eaten {return}
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::YELLOW);
+    }
+
+    fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+        println!("player collided with coin");
+    }
+
+    fn on_collision_end<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+        println!("player left coin area")
     }
 }
 
@@ -57,12 +66,8 @@ impl Actor<()> for Player {
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::RED);
     }
 
-    fn on_collision_end<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
-        println!("player left coin area")
-    }
-
     fn on_collision(&mut self, id: &ID<Self>, other: TypedID, world: &mut World) {
-        println!("player enter coin area");
+        //println!("player enter coin area");
         // Can detect the type of the colliding object
         // with the is() method
         if let Some(c_id) = other.is::<Coin>() {
@@ -96,19 +101,6 @@ impl Actor<()> for Player {
             world.with_world(id, move |p, world| {
                 world.move_by(p_id, &(p.vel * -2.0));
             });
-        }
-
-        // pattern matching method:
-        let t_coin = vaabbit::type_of::<Coin>();
-        let t_block = vaabbit::type_of::<Block>();
-        match other.type_id {
-            idx if idx == t_coin => {
-                
-            }
-            idx if idx == t_block => {
-
-            }
-            _ => {}
         }
     }
 } 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rapidhash::RapidHashMap;
 use crate::{World, ID};
 
 pub type Signal<T> = T;
@@ -9,7 +9,7 @@ pub trait EventEmitter<T> {
 
 impl<T: 'static> EventEmitter<T> for Signal<T> {
     fn emit<I: 'static>(world: &mut crate::world::World, id: &ID<I>, event: T) {
-        world.emit(id.clone(), event);
+        world.emit(*id, event);
     }
 }
 
@@ -23,20 +23,26 @@ pub(crate) struct EventListeners<E> {
 impl<E> EventListeners<E> {
     pub fn new() -> Self {
         Self {
-            listeners: Vec::new(),
+            listeners: Vec::with_capacity(32),
         }
     }
 }
 
 struct EventQueueEntry<T, E> {
-    pub(crate) emitters: HashMap<ID<T>, EventListeners<E>>,
+    pub(crate) emitters: RapidHashMap<ID<T>, EventListeners<E>>,
 }
 
 impl<T, E> EventQueueEntry<T, E> {
     pub fn new() -> Self {
         Self {
-            emitters: HashMap::new(),
+            emitters: RapidHashMap::default(),
         }
+    }
+}
+
+impl Default for EventQueue {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -65,10 +71,7 @@ impl EventQueue {
     (&mut self, emitter: ID<T>, _listener: ID<L>, closure: impl Fn(&mut World, &E) + 'static) {
         let entry = self.get_entry_mut::<T, E>();
 
-        if !entry.emitters.contains_key(&emitter) {
-            entry.emitters.insert(emitter, EventListeners::<E>::new());
-        }
-        let listeners = entry.emitters.get_mut(&emitter).unwrap();
+        let listeners = entry.emitters.entry(emitter).or_insert(EventListeners::<E>::new());        
 
         listeners.listeners.push(Box::new(closure));
     }

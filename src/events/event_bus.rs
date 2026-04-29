@@ -4,9 +4,9 @@ pub(crate) struct EventBus {
 }
 
 impl EventBus {
-    pub(crate) const fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            events: Vec::new(),
+            events: Vec::with_capacity(128),
         }
     }
 

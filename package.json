@@ -1,0 +1,6 @@
+{
+    "scripts": {
+        "bench-platformer": "samply record cargo run --example platformer -- --dev",
+        "bench-collision": "samply record cargo run --example collision_bench -- --dev"
+    }
+}

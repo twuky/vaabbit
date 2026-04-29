@@ -52,8 +52,8 @@ pub trait Shape {
     fn point_within_bounds(&self, point: Vec2) -> bool {
         let bounds = self.bounds();
 
-        (point.x > bounds.min.x && point.x < bounds.max.x) &&
-        (point.y > bounds.min.y && point.y < bounds.max.y)
+        (point.x >= bounds.min.x && point.x <= bounds.max.x) &&
+        (point.y >= bounds.min.y && point.y <= bounds.max.y)
     }
 
     fn bounds_overlaps_bounds(&self, other: impl Shape) -> bool {

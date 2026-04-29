@@ -8,6 +8,10 @@ pub struct Circle {
 }
 
 impl Circle {
+    pub fn new(pos: Vec2, radius: f32) -> Self {
+        Self { pos, radius }
+    }
+
     pub fn area(&self) -> f32 {
         std::f32::consts::PI * self.radius * self.radius
     }

@@ -1,7 +1,6 @@
 use std::any::TypeId;
 use std::fmt::Debug;
 use std::hash::Hash;
-use crate::entity::Actor;
 
 pub struct ID<T: ?Sized> {
     pub index: slotmap::DefaultKey,
@@ -25,7 +24,7 @@ impl TypedID {
     pub fn is<T: 'static>(&self) -> Option<ID<T>> {
         match self.type_id {
             id if id == std::any::TypeId::of::<T>() => {
-                Some(ID::<T>::from(self.clone()))
+                Some(ID::<T>::from(*self))
             }
             _ => None,
         }
@@ -75,7 +74,7 @@ impl<T: 'static> ID<T> {
         TypeId::of::<T>()
     }
     pub fn type_name(&self) -> &'static str {
-        std::any::type_name::<T>()
+        std::any::type_name::<T>().split("::").last().unwrap()
     }
 
     pub fn into_typed_id(self) -> TypedID {
@@ -95,7 +94,7 @@ impl<T> Clone for ID<T> {
     }
 
     fn clone_from(&mut self, source: &Self) {
-        *self = source.clone()
+        *self = *source
     }
 }
 

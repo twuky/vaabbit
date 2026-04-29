@@ -20,19 +20,16 @@ impl<T> Node<T> where T: Copy {
     }
 
     pub fn get_debug_info(&self, out: &mut Vec<(usize, AABB)>) {
-        match &self.children {
-            Some(children) => {
-                for child in children.iter() {
-                    child.get_debug_info(out);
-                }
-            },
-            None => {}
+        if let Some(children) = &self.children {
+            for child in children.iter() {
+                child.get_debug_info(out);
+            }
         };
         
         out.push((self.elements.len(), self.node_bounds));
     }
 
-    fn collect_all<'a>(&'a self, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
+    pub fn collect_all<'a>(&'a self, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
         out.extend(&self.elements);
         if let Some(children) = &self.children {
             for child in children.iter() {
@@ -65,18 +62,15 @@ impl<T> Node<T> where T: Copy {
     }
 
     pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
-        match &mut self.children {
-            Some(children) => {
-                for child in children.iter_mut() {
-                    let mut expanded = child.node_bounds;
-                    expanded.expand(32.0);
-                    if bounds.is_within_aabb(&expanded) {
-                        child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
-                        return;
-                    }
-                };
-            },
-            None => {}
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                let mut expanded = child.node_bounds;
+                expanded.expand(32.0);
+                if bounds.is_within_aabb(&expanded) {
+                    child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
+                    return;
+                }
+            };
         };
 
         // as a last resort, it is outside the tree, so this should be the root
@@ -113,17 +107,14 @@ impl<T> Node<T> where T: Copy {
         for el in to_replace {
             let mut inserted = false;
 
-            match &mut self.children {
-                Some(children) => {
-                    for child in children.iter_mut() {
-                        if el.1.is_within_aabb(&child.node_bounds) {
-                            child.insert(&el.0, &el.1, (d, max_depth), true);
-                            inserted = true;
-                            break;
-                        }
-                    };
-                },
-                None => {}  
+            if let Some(children) = &mut self.children {
+                for child in children.iter_mut() {
+                    if el.1.is_within_aabb(&child.node_bounds) {
+                        child.insert(&el.0, &el.1, (d, max_depth), true);
+                        inserted = true;
+                        break;
+                    }
+                };
             }
 
             if !inserted {
@@ -133,18 +124,15 @@ impl<T> Node<T> where T: Copy {
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
-        match &mut self.children {
-            Some(children) => {
-                for child in children.iter_mut() {
-                    child.remove_all(to_remove);
-                }
-            },
-            None => {}
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                child.remove_all(to_remove);
+            }
         };
         
         self.elements.retain(|item| {
             for (i, r) in &mut to_remove.iter().enumerate() {
-                if Some(item.0.clone()) == *r {
+                if Some(item.0) == *r {
                     to_remove[i] = None;
                     return false
                 }

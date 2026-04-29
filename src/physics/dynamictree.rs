@@ -1,10 +1,7 @@
-use std::num::NonZeroUsize;
-use glam::{vec2, Vec2};
+use std::cell::UnsafeCell;
+use glam::Vec2;
 use smallvec::{smallvec, SmallVec};
-use crate::shapes::{self, AABB};
-
-type TreeIndex = slotmap::DefaultKey;
-type UserDataIndex = slotmap::DefaultKey;
+use crate::shapes::AABB;
 
 pub struct Node<T> {
     pub bounds: AABB,
@@ -30,7 +27,7 @@ impl<T> Node<T> {
     pub fn new_leaf(bounds: AABB, parent: Option<usize>, data: T) -> Self {
         Self {
             bounds,
-            parent: parent,
+            parent,
             child_1: None,
             child_2: None,
             data: Some(data),
@@ -45,14 +42,25 @@ impl<T> Node<T> {
 pub struct DynamicTree<T> {
     pub root: usize,
     pub nodes: Vec<Node<T>>,
+
+    query_stack: UnsafeCell<Vec<usize>>,
+}
+
+impl<T: Clone + std::cmp::PartialEq> Default for DynamicTree<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
     pub fn new() -> Self {
         let leaf = Node::<T>::new(AABB {min: Vec2::ZERO, max: Vec2::ZERO});
+        let mut nodes: Vec<Node<T>> = Vec::with_capacity(2048);
+        nodes.push(leaf);
         Self {
             root: 0,
-            nodes: vec![leaf]
+            nodes,
+            query_stack: UnsafeCell::new(Vec::with_capacity(512)),
         }
     }
 
@@ -68,28 +76,31 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
 
         if self.nodes.len() <= 1 {return out}
 
-        let mut stack = Vec::with_capacity(512);
+        // safety: query func is not recursive,
+        // and is the only function that can modify the scratch stack
+        let stack = unsafe { &mut *self.query_stack.get() };
+        stack.clear();
         stack.push(self.root);
 
-        while let Some(index) = stack.pop() {
-            let node = unsafe {
-                // safety: we currently do not delete nodes from the tree,
-                // since we rebuild each frame.
-                &self.nodes.get_unchecked(index)
-            };            
+        let mut cursor = 0;
 
-            // skip if not overlapping
+        while cursor < stack.len() {
+            let index = stack[cursor];
+            cursor += 1;
+
+            let node = unsafe {
+                self.nodes.get_unchecked(index)
+            };
+
             if !bounds.overlaps_aabb(&node.bounds) {
                 continue;
             }
 
-            // if leaf
             if let Some(data) = &node.data {
                 out.push((data, &node.bounds));
                 continue;
             }
 
-            // if internal
             if let Some(c1) = node.child_1 {
                 stack.push(c1);
             }
@@ -97,6 +108,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
                 stack.push(c2);
             }
         }
+
         out
     }
 
@@ -133,7 +145,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn insert(&mut self,  data: T, bounds: &AABB,) {
@@ -182,19 +194,20 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         unsafe {
             let mut index = self.root;
 
+            let mut search;
+            let mut child_1; let mut child_2;
+            let mut cost_1; let mut cost_2;
             loop {
-                let search = self.nodes.get_unchecked(index);
-                if search.is_leaf() {
+                search = self.nodes.get_unchecked(index);
+                if search.child_1.is_none() {
                     return index;
                 }
 
-                let child_1 = self.nodes.get_unchecked(search.child_1.unwrap_unchecked());
-                let child_2 = self.nodes.get_unchecked(search.child_2.unwrap_unchecked());
+                child_1 = self.nodes.get_unchecked(search.child_1.unwrap_unchecked());
+                child_2 = self.nodes.get_unchecked(search.child_2.unwrap_unchecked());
 
-                let cost_1 = child_1.bounds.union(*leaf_bounds).perimeter()
-                    - child_1.bounds.perimeter();
-                let cost_2 = child_2.bounds.union(*leaf_bounds).perimeter()
-                    - child_2.bounds.perimeter();
+                cost_1 = child_1.bounds.union(*leaf_bounds).inseam();
+                cost_2 = child_2.bounds.union(*leaf_bounds).inseam();
 
                 index = if cost_1 < cost_2 { 
                     search.child_1.unwrap_unchecked()
@@ -207,21 +220,23 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
 
     #[inline(always)]
     fn fix_upwards(&mut self, mut index: Option<usize>) {
+        let mut new_bounds: AABB;
+        let mut c1; let mut c2; let mut updated;
+        
         unsafe {
             while let Some(i) = index {
-            let (c1, c2) = {
+                new_bounds = {
                     let n = &self.nodes.get_unchecked(i);
-                    let c1 = self.nodes.get_unchecked(n.child_1.unwrap());
-                    let c2 = self.nodes.get_unchecked(n.child_2.unwrap());
+                    c1 = self.nodes.get_unchecked(n.child_1.unwrap_unchecked());
+                    c2 = self.nodes.get_unchecked(n.child_2.unwrap_unchecked());
 
-                    (c1, c2)
+                    c1.bounds.union(c2.bounds)
                 };
+                
+                updated = self.nodes.get_unchecked_mut(i);
 
-                let new_bounds = c1.bounds.union(c2.bounds);
-                let n = self.nodes.get_unchecked_mut(i);
-
-                n.bounds = new_bounds;
-                index = n.parent;
+                updated.bounds = new_bounds;
+                index = updated.parent;
             }
         }
     }
@@ -232,9 +247,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         let mut stack = SmallVec::<[&usize; 128]>::new();
         stack.push(&self.root);
 
-        let mut depth = 0;
         while let Some(index) = stack.pop() {
-            depth += 1;
 
             let node = &self.nodes.get(*index).unwrap();
 
@@ -253,6 +266,6 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
             }
         }
 
-        return out;
+        out
     }
 }

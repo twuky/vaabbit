@@ -21,8 +21,16 @@ impl Collider {
             (Collider::CIRCLE(a), Collider::AABB(b)) => a.overlaps_aabb(b),
             (Collider::CIRCLE(a), Collider::CIRCLE(b)) => a.overlaps_circle(b),
             (Collider::AABB(a), Collider::CIRCLE(b)) => a.overlaps_circle(b),
-            _ => false
+            //_ => false
         }
+    }
+
+    pub fn aabb(pos: Vec2, size: Vec2) -> Option<Self> {
+        Some(Collider::AABB(AABB::from_pos_size(pos, size)))
+    }
+
+    pub fn circle(pos: Vec2, radius: f32) -> Option<Self> {
+        Some(Collider::CIRCLE(Circle::new(pos, radius)))
     }
 }
 

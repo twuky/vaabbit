@@ -52,8 +52,8 @@ impl AABBI32 {
     }
 
     pub fn overlaps_point(&self, point: IVec2) -> bool {
-        return point.x >= self.min.x && point.x <= self.max.x &&
-        point.y >= self.min.y && point.y <= self.max.y;
+        point.x >= self.min.x && point.x <= self.max.x &&
+        point.y >= self.min.y && point.y <= self.max.y
     }
 
     pub fn center(&self) -> IVec2 {
