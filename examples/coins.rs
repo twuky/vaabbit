@@ -36,7 +36,7 @@ impl Actor<()> for Coin {
                 });
 
                 // the player can now broadcast an event, having collected a coin
-                world.emit(self.player_id.unwrap(), () as CollectEvent);
+                self.emit(world, () as CollectEvent);
             }
         }
 

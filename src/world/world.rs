@@ -3,12 +3,11 @@ use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use anymap::AnyMap;
-use glam::{Vec2, vec2};
-use smallvec::SmallVec;
+use glam::{vec2};
 
 use crate::TypedID;
 use crate::events::{EventBus, EventQueue};
-use crate::physics::{Physics, PhysicsBody};
+use crate::physics::{Physics};
 use crate::shapes::AABB;
 use crate::entity::{Actor, ID};
 use crate::world::registry::Registry;
@@ -51,7 +50,7 @@ impl World {
         self.events.subscribe(emitter, listener, closure);
     }
 
-    pub fn emit<E: 'static, T: 'static>(&mut self, emitter: ID<T>, event: E) {
+    pub(crate) fn emit<E: 'static, T: 'static>(&mut self, emitter: ID<T>, event: E) {
         let mut drained = if let Some(e) = self.events.get_listeners::<E, T>(emitter) {
             std::mem::take(&mut e.listeners)
         } else {
@@ -142,109 +141,6 @@ impl World {
         self.physics.cleanup();
         self.registry.recently_removed.clear();
         self.logic_update = time.elapsed();
-    }
-
-    #[inline(always)]
-    pub fn get_pos<T: 'static>(&self, id: &ID<T>) -> Vec2 {
-        self.physics.get_body_pos(id).unwrap_or(Vec2::ZERO)
-    }
-
-    #[inline(always)]
-    pub fn get_physics_body<T: 'static>(&self, id: &ID<T>) -> Option<&PhysicsBody> {
-        self.physics.get_body(id)
-    }
-
-    pub fn set_pos<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, pos: Vec2) {
-        let mut new_body = *self.physics.get_body(&id).unwrap();
-        let old_pos = new_body.pos();
-        new_body.set_pos(&pos);
-
-        // our tree contains "fat" bounding boxes, so if movement is small,
-        // we dont need to rebalance the tree
-        if pos.distance(old_pos) < crate::physics::TREE_BOUNDS_PADDING {
-            // fast path
-            self.physics.update_body_in_place(&id, new_body);
-        } else {
-            self.physics.update_body(&id, new_body);
-        }
-        let bounds = new_body.bounds();
-        
-        // perform broad phase collision
-        let mut query = SmallVec::new();
-        self.physics.query_against_id(&bounds, &mut query, id.into_typed_id());
-        
-        for collided in query {
-            // near phase collision
-            if new_body.overlaps(collided) {
-                let other_id = collided.id;
-                self.with_world(&id, move |ett, world| {
-                    ett.on_collision(&id, other_id, world);
-                });
-            }
-        }
-    }
-
-    pub fn move_by<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, delta: &Vec2) -> Vec2 {
-        let mut new_body = *self.physics.get_body(&id).unwrap();
-        new_body.translate(delta);
-
-        let new_pos = new_body.pos();
-        let bounds = new_body.bounds();
-
-        // our tree contains "fat" bounding boxes, so if movement is small,
-        // we dont need to rebalance the tree
-        if delta.length() < crate::physics::TREE_BOUNDS_PADDING {
-            // fast path
-            self.physics.update_body_in_place(&id, new_body);
-        } else {
-            self.physics.update_body(&id, new_body);
-        }
-
-        let mut query = SmallVec::new();
-        self.physics.query_against_id(&bounds, &mut query, id.into_typed_id());
-
-        let overlap_list = self.physics.get_overlap_list(&id);
-        // new objects we are overlapping with after movement
-        let mut new_overlaps = Vec::with_capacity(2);
-        // objects we are no longer overlapping with after movement
-        let mut overlap_exits = Vec::with_capacity(2);
-
-        // any IDs that are in the overlap list but not in the query are no longer overlapping
-        for ov_id in overlap_list {
-            if !query.iter().any(|c| c.id == *ov_id) {
-                overlap_exits.push(*ov_id);
-            }
-        }
-
-        // lifecycle: collision start
-        for collided in query {
-            if overlap_list.contains(&collided.id) { continue; }
-            // near phase collision
-            if new_body.overlaps(collided) {
-                let other_id = collided.id;
-                new_overlaps.push(other_id);
-                self.with_world(&id, move |ett, world| {
-                    ett.on_collision(&id, other_id, world);
-                });
-            }
-        }
-
-        for other_id in &new_overlaps {
-            self.physics.add_late_collision_enter(*other_id, id.into_typed_id());
-        }
-
-        // lifecycle: collision end
-        for other_id in &overlap_exits {
-            let o_id = *other_id;
-            self.with_world(&id, move |ett, world| {
-                ett.on_collision_end(&id, o_id, world);
-            });
-            self.physics.add_late_collision_exit(*other_id, id.into_typed_id());
-        }
-
-        self.physics.update_overlap_list(&id, &new_overlaps, &overlap_exits);
-
-        new_pos
     }
 
     /**
