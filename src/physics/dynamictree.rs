@@ -65,7 +65,9 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
     }
 
     pub fn clear(&mut self) {
-        self.nodes.clear();
+        unsafe {
+            self.nodes.set_len(0);
+        }
         let leaf = Node::<T>::new(AABB {min: Vec2::ZERO, max: Vec2::ZERO});
         self.nodes.push(leaf);
         self.root = 0;
@@ -79,10 +81,13 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
         // safety: query func is not recursive,
         // and is the only function that can modify the scratch stack
         let stack = unsafe { &mut *self.query_stack.get() };
-        stack.clear();
-        stack.push(self.root);
+        unsafe { stack.set_len(0); }
+        let _ = stack.push_mut(self.root);
 
         let mut cursor = 0;
+
+        let qmin = bounds.min;
+        let qmax = bounds.max;
 
         while cursor < stack.len() {
             let index = stack[cursor];
@@ -92,7 +97,8 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
                 self.nodes.get_unchecked(index)
             };
 
-            if !bounds.overlaps_aabb(&node.bounds) {
+            // branchless 4-way overlap test via Vec2 SIMD
+            if !(node.bounds.min.cmplt(qmax) & node.bounds.max.cmpgt(qmin)).all() {
                 continue;
             }
 
@@ -192,11 +198,13 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
     #[inline(always)]
     fn find_best_sibling(&self, leaf_bounds: &AABB) -> usize {
         unsafe {
+            let lmin = leaf_bounds.min;
+            let lmax = leaf_bounds.max;
             let mut index = self.root;
 
             let mut search;
             let mut child_1; let mut child_2;
-            let mut cost_1; let mut cost_2;
+            let mut e1; let mut e2;
             loop {
                 search = self.nodes.get_unchecked(index);
                 if search.child_1.is_none() {
@@ -206,13 +214,17 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
                 child_1 = self.nodes.get_unchecked(search.child_1.unwrap_unchecked());
                 child_2 = self.nodes.get_unchecked(search.child_2.unwrap_unchecked());
 
-                cost_1 = child_1.bounds.union(*leaf_bounds).inseam();
-                cost_2 = child_2.bounds.union(*leaf_bounds).inseam();
+                // perimeter_heightweighted expansion = expand_x + 2*expand_y,
+                // computed without constructing the union AABB
+                e1 = (lmax - child_1.bounds.max).max(Vec2::ZERO)
+                   + (child_1.bounds.min - lmin).max(Vec2::ZERO);
+                e2 = (lmax - child_2.bounds.max).max(Vec2::ZERO)
+                   + (child_2.bounds.min - lmin).max(Vec2::ZERO);
 
-                index = if cost_1 < cost_2 { 
+                index = if e1.x + e1.y + e1.y <= e2.x + e2.y + e2.y {
                     search.child_1.unwrap_unchecked()
-                } else { 
-                    search.child_2.unwrap_unchecked() 
+                } else {
+                    search.child_2.unwrap_unchecked()
                 };
             }
         }
@@ -220,23 +232,21 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
 
     #[inline(always)]
     fn fix_upwards(&mut self, mut index: Option<usize>) {
-        let mut new_bounds: AABB;
-        let mut c1; let mut c2; let mut updated;
-        
         unsafe {
+            let base = self.nodes.as_mut_ptr();
             while let Some(i) = index {
-                new_bounds = {
-                    let n = &self.nodes.get_unchecked(i);
-                    c1 = self.nodes.get_unchecked(n.child_1.unwrap_unchecked());
-                    c2 = self.nodes.get_unchecked(n.child_2.unwrap_unchecked());
+                let n = base.add(i);
+                let c1_idx = (*n).child_1.unwrap_unchecked();
+                let c2_idx = (*n).child_2.unwrap_unchecked();
+                let parent = (*n).parent;
 
-                    c1.bounds.union(c2.bounds)
-                };
-                
-                updated = self.nodes.get_unchecked_mut(i);
+                let new_bounds = (*base.add(c1_idx)).bounds.union((*base.add(c2_idx)).bounds);
 
-                updated.bounds = new_bounds;
-                index = updated.parent;
+                if (*n).bounds == new_bounds {
+                    break;
+                }
+                (*n).bounds = new_bounds;
+                index = parent;
             }
         }
     }
