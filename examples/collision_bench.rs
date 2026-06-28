@@ -2,8 +2,6 @@ use std::time::SystemTime;
 
 use glam::Vec2;
 use vaabbit::{Actor, ID, TypedID, World, physics::PhysicsClass, shapes::{AABB, Collider}, world};
-use glam::Vec2;
-use vaabbit::{Actor, ID, TypedID, World, physics::PhysicsClass, shapes::{AABB, Collider}, world};
 use vibbit::{Color, Vibbit};
 use macroquad::{color, prelude::rand};
 
@@ -27,13 +25,8 @@ impl Actor<()> for Rect {
         vaabbit::physics::PhysicsBody::new(Vec2::ZERO, Some(Collider::AABB(AABB { min: Vec2::ZERO, max: glam::Vec2::new(32.0, 32.0)})), id, PhysicsClass::Actor)
     }
 
-
-    fn init_physicsbody(id:TypedID) -> vaabbit::physics::PhysicsBody where Self: Sized {
-        vaabbit::physics::PhysicsBody::new(Vec2::ZERO, Some(Collider::AABB(AABB { min: Vec2::ZERO, max: glam::Vec2::new(32.0, 32.0)})), id, PhysicsClass::Actor)
-    }
-
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
-        let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _id, _world);
+        let pos = self.move_by(&(self.vel * unsafe{DT} * 60.0), _world);
         
         if pos.x < 0.0 || pos.x > 1280.0 - 32.0 {
             self.vel.x *= -1.0;
@@ -74,7 +67,7 @@ fn main() {
         for (_id, rect) in world.query_id::<Rect>() {
             let pos = world.get_pos(_id);
             let mut color = Color::new(255,255,255,255);
-            let collided = rect.get_colliding_bodies(_id, &world).len();
+            let collided = rect.get_colliding_bodies(&world).len();
             if collided > 0 {
                 color = Color::new(255,0,0,255);
             }

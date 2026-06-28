@@ -6,6 +6,7 @@ use anymap::AnyMap;
 use glam::{Vec2, vec2};
 use smallvec::SmallVec;
 
+use crate::TypedID;
 use crate::events::{EventBus, EventQueue};
 use crate::physics::{Physics, PhysicsBody};
 use crate::shapes::AABB;
@@ -21,6 +22,8 @@ pub struct World {
     events: EventQueue,
     pub(crate)physics: Physics,
     singletons: AnyMap,
+
+    pub(crate) current_actor: Option<TypedID>,
 }
 
 impl Default for World {
@@ -39,6 +42,8 @@ impl World {
             event_bus: RefCell::new(EventBus::new()),
             events: EventQueue::new(),
             singletons: AnyMap::new(),
+
+            current_actor: None,
         }
     }
 
@@ -104,6 +109,7 @@ impl World {
     pub fn remove_actor<T: Actor<P> + 'static, P: 'static>(&mut self, id: &ID<T>) {
         let id = *id;
         self.with_world(&id, move |_ett, world| {
+            world.current_actor = Some(TypedID::from_id(id));
             // lifecycle: removal
             // ett.on_remove(id, world);
 
@@ -260,9 +266,10 @@ impl World {
     */
     pub fn with<T: 'static>(&self, id: &ID<T>, f: impl Fn(&mut T) + 'static) {
         let id = *id;
-        let closure = move |_world: &mut World| {
+        let closure = move |world: &mut World| {
             let entry = Registry::get_mut(&id);
             if let Some(entity) = entry {
+                world.current_actor = Some(TypedID::from_id(id));
                 f(&mut entity.1);
             } else {
                 println!("with(entity) not found: {:?}", id.clone());
@@ -282,6 +289,7 @@ impl World {
             let entry = Registry::get_mut(&id);
 
             if let Some(entity) = entry {
+                world.current_actor = Some(TypedID::from_id(id));
                 f(&mut entity.1, world);
             } else {
                 if world.registry.recently_removed.contains(&id.into_typed_id()) {

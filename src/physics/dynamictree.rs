@@ -98,7 +98,7 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
             };
 
             // branchless 4-way overlap test via Vec2 SIMD
-            if !(node.bounds.min.cmplt(qmax) & node.bounds.max.cmpgt(qmin)).all() {
+            if !node.bounds.overlaps_aabb(&bounds) {
                 continue;
             }
 

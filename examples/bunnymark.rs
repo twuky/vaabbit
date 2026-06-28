@@ -19,7 +19,7 @@ impl Bunny {
 impl Actor<()> for Bunny {
     #[inline(always)]
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
-        let pos = self.move_by(&self.vel, _id, _world);
+        let pos = self.move_by(&self.vel, _world);
         
         if pos.x < 0.0 {
             self.vel.x *= -1.0;

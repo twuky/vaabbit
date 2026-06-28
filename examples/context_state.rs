@@ -14,7 +14,7 @@ impl Actor<Vibbit> for Player {
         // get user input and draw to the screen
         let dir = vib.get_dir_wasd();
 
-        let pos = self.move_by(&Vec2::new(dir.x, dir.y), &id, world);
+        let pos = self.move_by(&Vec2::new(dir.x, dir.y), world);
         vib.draw_rect(vibbit::Vec2::new(pos.x, pos.y), 10.0, 10.0, vibbit::Color::new(255,255,255,255));
     }
 }

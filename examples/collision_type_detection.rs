@@ -20,27 +20,19 @@ struct Block {
 
 impl Actor<()> for Block {
     fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
-        let pos = self.pos(_id, world);
+        let pos = self.pos(world);
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::WHITE);
     }
 }
 
 impl Actor<()> for Coin {
     fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
-        self.move_by(&(0.0, 0.0).into(), _id, world);
-        self.move_by(&(0.0, 0.0).into(), _id, world);
-        let pos = self.pos(_id, world);
+        self.move_by(&(0.0, 0.0).into(), world);
+        self.move_by(&(0.0, 0.0).into(), world);
+        let pos = self.pos(world);
 
         if self.eaten {return}
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::YELLOW);
-    }
-
-    fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
-        println!("player collided with coin");
-    }
-
-    fn on_collision_end<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
-        println!("player left coin area")
     }
 
     fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
@@ -69,7 +61,7 @@ impl Actor<()> for Player {
         }
         self.vel = vel;
 
-        let pos = self.move_by(&(vel * 2.0), _id, _world);
+        let pos = self.move_by(&(vel * 2.0), _world);
 
         //println!("{:?}", self.pos);
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::RED);

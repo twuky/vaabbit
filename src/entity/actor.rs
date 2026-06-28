@@ -24,6 +24,7 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
             let entry = registry_entry.arena.get_mut(id.index);
 
             if let Some(actor) = entry {
+                world.current_actor = Some(TypedID::from_id(actor.0));
                 // late collision lifecycle hook         
                 if let Some(collisions) = world.physics.get_late_collision_enter(id) {
                     let overlap_list = world.physics.get_overlap_list(id).clone();
@@ -64,22 +65,26 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
 
     #[inline(always)]
     // Returns the position of the actor in the game world
-    fn pos(&self, id: &ID<Self>, world: &World) -> Vec2 where Self: Sized {
+    fn pos(&self, world: &World) -> Vec2 where Self: Sized {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.get_pos(id)
     }
     #[inline(always)]
     // Sets the position of the actor in the game world
-    fn set_pos(&mut self, pos: Vec2, id: &ID<Self>, world: &'static mut World) where Self:Sized {
+    fn set_pos(&mut self, pos: Vec2, world: &'static mut World) where Self:Sized {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.set_pos(*id, pos);
     }
     #[inline(always)]
     // Moves the actor by the given vector, returning the new position
-    fn move_by(&self, vector: &Vec2, id: &ID<Self>, world: &mut World) -> Vec2 where Self: Sized {
+    fn move_by(&self, vector: &Vec2, world: &mut World) -> Vec2 where Self: Sized {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.move_by(*id, vector)
     }
 
     #[inline(always)]
-    fn move_and_slide(&self, vector: &Vec2, id: &ID<Self>, world: &mut World) -> MovementResults where Self: Sized {
+    fn move_and_slide(&self, vector: &Vec2, world: &mut World) -> MovementResults where Self: Sized {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.move_and_slide(*id, vector)
     }
 
@@ -94,19 +99,22 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     }
 
     // Returns a list of all actors that are currently colliding with this actor
-    fn get_colliding_bodies<'a>(&self, id: &ID<Self>, world: &'a World) -> &'a Vec<TypedID> {
+    fn get_colliding_bodies<'a>(&self, world: &'a World) -> &'a Vec<TypedID> {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.physics.get_overlap_list(id)
     }
 
     #[inline(always)]
     // Moves the actor by the given vector, returning the new position
-    fn emit<E: 'static>(&self, id: &ID<Self>, world: &mut World, event: E) {
+    fn emit<E: 'static>(&self, world: &mut World, event: E) {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.emit(*id, event);
     }
 
     #[inline(always)]
     // Moves the actor by the given vector, returning the new position
-    fn listen<E: 'static, O: 'static>(&self, id: &ID<Self>, world: &mut World, other: ID<O>, closure: impl Fn(&mut World, &E) + 'static) {
+    fn listen<E: 'static, O: 'static>(&self, world: &mut World, other: ID<O>, closure: impl Fn(&mut World, &E) + 'static) {
+        let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.subscribe(other, *id, closure);
     }
 

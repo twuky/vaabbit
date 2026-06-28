@@ -53,7 +53,7 @@ impl Actor<Vibbit> for Coin {
 
     fn update(&mut self, id: &ID<Self>, world: &mut World, vib: &mut Vibbit) where Self: Sized {
         let color = vibbit::Color::new(255,255,128,255);
-        vib.draw_rect(self.pos(id, world), 8.0, 8.0, color);
+        vib.draw_rect(self.pos(world), 8.0, 8.0, color);
     }
 
     fn on_collision<'a>(&mut self, id: &ID<Self>, other: vaabbit::TypedID, world: &'a mut World) {
@@ -111,7 +111,7 @@ impl Actor<Vibbit> for Player {
 
         let dir = Vec2::new(dir.x * 2.0, self.vel);
         // move based on input, then apply gravity.
-        let results = self.move_and_slide(&dir, id, world);
+        let results = self.move_and_slide(&dir, world);
 
         // are we grounded?
         if results.touching_below && self.vel <= 0.0 {

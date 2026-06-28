@@ -1,6 +1,7 @@
 use glam::*;
 use super::*;
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Vec2,
@@ -34,10 +35,26 @@ impl AABB {
 
     #[inline(always)]
     pub fn overlaps_aabb(&self, other: &AABB) -> bool {
-        self.min.x < other.max.x &&
-        self.max.x > other.min.x &&
-        self.min.y < other.max.y &&
-        self.max.y > other.min.y
+        #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::*;
+            unsafe {
+                let a = _mm_loadu_ps(self  as *const AABB as *const f32);
+                let b = _mm_loadu_ps(other as *const AABB as *const f32);
+                // lhs = [self.min.x, self.min.y, other.min.x, other.min.y]
+                // rhs = [other.max.x, other.max.y, self.max.x, self.max.y]
+                let lhs = _mm_movelh_ps(a, b);
+                let rhs = _mm_movehl_ps(a, b);
+                // branchless: self.min < other.max (lanes 0,1) AND other.min < self.max (lanes 2,3)
+                _mm_movemask_ps(_mm_cmplt_ps(lhs, rhs)) == 0xF
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.min.x < other.max.x &&
+            self.max.x > other.min.x &&
+            self.min.y < other.max.y &&
+            self.max.y > other.min.y
+        }
     }
 
     pub fn pos(&self) -> Vec2 {
@@ -54,8 +71,26 @@ impl AABB {
 
     #[inline(always)]
     pub fn is_within_aabb(&self, other: &AABB) -> bool {
-        other.point_within_bounds(self.min) &&
-        other.point_within_bounds(self.max)
+        #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::*;
+            unsafe {
+                let a = _mm_loadu_ps(self  as *const AABB as *const f32);
+                let b = _mm_loadu_ps(other as *const AABB as *const f32);
+                // lhs = [other.min.x, other.min.y, self.max.x,  self.max.y]
+                // rhs = [self.min.x,  self.min.y,  other.max.x, other.max.y]
+                let lhs = _mm_shuffle_ps(b, a, 0b11100100);
+                let rhs = _mm_shuffle_ps(a, b, 0b11100100);
+                // branchless: other.min <= self.min AND self.max <= other.max
+                _mm_movemask_ps(_mm_cmple_ps(lhs, rhs)) == 0xF
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.min.x >= other.min.x &&
+            self.min.y >= other.min.y &&
+            self.max.x <= other.max.x &&
+            self.max.y <= other.max.y
+        }
     }
 
     #[inline(always)]
@@ -66,6 +101,23 @@ impl AABB {
 
     #[inline(always)]
     pub fn union(self, other: AABB) -> Self {
+        #[cfg(target_arch = "x86_64")] {
+            use std::arch::x86_64::*;
+            unsafe {
+                // #[repr(C)] AABB is exactly [min.x, min.y, max.x, max.y], so load
+                // each as one unaligned 128-bit vector (no scalar gather).
+                let a = _mm_loadu_ps(&self  as *const AABB as *const f32);
+                let b = _mm_loadu_ps(&other as *const AABB as *const f32);
+                let lo = _mm_min_ps(a, b);  // correct for lanes 0,1 (min components)
+                let hi = _mm_max_ps(a, b);  // correct for lanes 2,3 (max components)
+                // want [lo[0], lo[1], hi[2], hi[3]]; the compiler folds this to a movsd merge
+                let r = _mm_shuffle_ps(lo, hi, 0b11100100);
+                let mut out = std::mem::MaybeUninit::<AABB>::uninit();
+                _mm_storeu_ps(out.as_mut_ptr() as *mut f32, r);
+                out.assume_init()
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
         Self {
             min: self.min.min(other.min),
             max: self.max.max(other.max),
@@ -74,7 +126,17 @@ impl AABB {
 
     #[inline(always)]
     pub fn perimeter(&self) -> f32 {
-        self.width() + self.height() * 2.0
+        let w = self.width();
+        let h = self.height();
+        w + w + h + h
+    }
+
+    /// useful for greedily inserting AABBs into the dynamic tree
+    #[inline(always)]
+    pub fn perimeter_heightweighted(&self) -> f32 {
+        let w = self.width();
+        let h = self.height();
+        w + h + h
     }
 
     #[inline(always)]
@@ -102,10 +164,12 @@ impl AABB {
         vec2(self.max.x, self.max.y)
     }
 
+    #[inline(always)]
     pub fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
 
+    #[inline(always)]
     pub fn height(&self) -> f32 {
         self.max.y - self.min.y
     }
@@ -158,7 +222,8 @@ impl Shape for AABB {
     }
     
     fn overlaps_circle(&self, other: &Circle) -> bool {
-        super::solve::overlaps_poly_circle(self, other)
+        let closest = other.pos.clamp(self.min, self.max);
+        closest.distance_squared(other.pos) < other.radius * other.radius
     }
 
     fn edges(&self) -> Option<Vec<Edge>> {
