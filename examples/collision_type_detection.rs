@@ -28,10 +28,19 @@ impl Actor<()> for Block {
 impl Actor<()> for Coin {
     fn update(&mut self, _id: &ID<Self>, world: &mut World, ctx: &mut ()) {
         self.move_by(&(0.0, 0.0).into(), _id, world);
+        self.move_by(&(0.0, 0.0).into(), _id, world);
         let pos = self.pos(_id, world);
 
         if self.eaten {return}
         draw_rectangle(pos.x, pos.y, 32.0, 32.0, color::YELLOW);
+    }
+
+    fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+        println!("player collided with coin");
+    }
+
+    fn on_collision_end<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
+        println!("player left coin area")
     }
 
     fn on_collision<'a>(&mut self, id: &ID<Self>, other: TypedID, world: &'a mut World) {
@@ -67,6 +76,7 @@ impl Actor<()> for Player {
     }
 
     fn on_collision(&mut self, id: &ID<Self>, other: TypedID, world: &mut World) {
+        //println!("player enter coin area");
         //println!("player enter coin area");
         // Can detect the type of the colliding object
         // with the is() method

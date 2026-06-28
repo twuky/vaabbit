@@ -16,11 +16,12 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     #[inline]
     // System that updates the actor's state each frame, applying lifecycle hooks
     fn update_system(world: &mut World, ctx: &mut P) where Self: Sized {
+        let registry_entry = &mut Registry::get_entry_mut::<Self>();
         // clone prevents flicker, ie objects spawning in the same frame
-        let entities = Registry::get_entry::<Self>().entities.to_vec();
+        let entities = registry_entry.entities.to_vec();
 
         for id in &entities {
-            let entry = Registry::get_mut(id);
+            let entry = registry_entry.arena.get_mut(id.index);
 
             if let Some(actor) = entry {
                 // late collision lifecycle hook         
@@ -258,5 +259,4 @@ impl World {
 
         result
     }
-
 }

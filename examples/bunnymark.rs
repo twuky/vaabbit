@@ -63,6 +63,7 @@ fn main() {
         for (_id, bunny) in world.query_id::<Bunny>() {
             let pos = world.get_pos(_id);
             vib.draw_texture(tex, offset + pos, bunny.color);
+            vib.draw_texture(tex, offset + pos, bunny.color);
         }
 
         vib.end_frame();

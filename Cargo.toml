@@ -16,21 +16,25 @@ debug = false
 opt-level = 3
 lto = "fat"
 debug = false
+debug = false
 codegen-units = 1
 
 [profile.release.package."*"]
 opt-level = 3
+debug = false
 debug = false
 codegen-units = 1
 
 [dependencies]
 anymap = "*"
 glam = { version = "0.30.9", default-features = true, features = [] }
+glam = { version = "0.30.9", default-features = true, features = [] }
 smallvec = "1.15.1"
 ulid = "*"
 slotmap = "*"
+stash = "0.1.6"
 rapidhash = "4.4.1"
 
 [dev-dependencies]
-macroquad = { version = "0.4.14" }
+macroquad = { version = "*" }
 vibbit = { path = "../vibbit" }

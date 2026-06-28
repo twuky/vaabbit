@@ -25,9 +25,9 @@ pub(crate) struct Physics {
     to_delete: SecondaryMap<slotmap::DefaultKey, ()>,
 
     // late collision detection. consumed by an object when it updates for events created by other object movement
-    pub late_collision_enter: RapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
+    pub late_collision_enter: RapidRapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
     // late collision detection. consumed by an object when it updates for events created by other object movement
-    pub late_collision_exit: RapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
+    pub late_collision_exit: RapidRapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
 
     tree_bounds: AABB,
 }

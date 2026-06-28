@@ -201,31 +201,27 @@ impl<T: Clone + std::cmp::PartialEq> DynamicTree<T> {
             let lmin = leaf_bounds.min;
             let lmax = leaf_bounds.max;
             let mut index = self.root;
+            let base = self.nodes.as_ptr();
 
-            let mut search;
-            let mut child_1; let mut child_2;
-            let mut e1; let mut e2;
             loop {
-                search = self.nodes.get_unchecked(index);
-                if search.child_1.is_none() {
-                    return index;
-                }
+                let search = &*base.add(index);
+                let c1_idx = match search.child_1 {
+                    None => return index,
+                    Some(i) => i,
+                };
+                let c2_idx = search.child_2.unwrap_unchecked();
 
-                child_1 = self.nodes.get_unchecked(search.child_1.unwrap_unchecked());
-                child_2 = self.nodes.get_unchecked(search.child_2.unwrap_unchecked());
+                let c1 = &*base.add(c1_idx);
+                let c2 = &*base.add(c2_idx);
 
                 // perimeter_heightweighted expansion = expand_x + 2*expand_y,
                 // computed without constructing the union AABB
-                e1 = (lmax - child_1.bounds.max).max(Vec2::ZERO)
-                   + (child_1.bounds.min - lmin).max(Vec2::ZERO);
-                e2 = (lmax - child_2.bounds.max).max(Vec2::ZERO)
-                   + (child_2.bounds.min - lmin).max(Vec2::ZERO);
+                let e1 = (lmax - c1.bounds.max).max(Vec2::ZERO)
+                       + (c1.bounds.min - lmin).max(Vec2::ZERO);
+                let e2 = (lmax - c2.bounds.max).max(Vec2::ZERO)
+                       + (c2.bounds.min - lmin).max(Vec2::ZERO);
 
-                index = if e1.x + e1.y + e1.y <= e2.x + e2.y + e2.y {
-                    search.child_1.unwrap_unchecked()
-                } else {
-                    search.child_2.unwrap_unchecked()
-                };
+                index = if e1.x + e1.y + e1.y <= e2.x + e2.y + e2.y { c1_idx } else { c2_idx };
             }
         }
     }
