@@ -19,7 +19,8 @@ impl Bunny {
 impl Actor<()> for Bunny {
     #[inline(always)]
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
-        let pos = self.move_by(&self.vel, _world);
+        let vel = self.vel;
+        let pos = self.move_by(&vel, _world);
         
         if pos.x < 0.0 {
             self.vel.x *= -1.0;
@@ -60,7 +61,7 @@ fn main() {
 
         vib.clear_screen(Color::new(0,0,0,255));
 
-        for (_id, bunny) in world.query_id::<Bunny>() {
+        for (_id, bunny) in world.query::<Bunny>() {
             let pos = world.get_pos(_id);
             vib.draw_texture(tex, offset + pos, bunny.color);
             vib.draw_texture(tex, offset + pos, bunny.color);

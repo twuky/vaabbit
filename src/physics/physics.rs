@@ -237,3 +237,9 @@ impl Physics {
         self.tree.get_debug_info()
     }
 }
+
+impl crate::world::World {
+    pub fn get_colliding_bodies<T: 'static>(&self, id: &ID<T>) -> &Vec<TypedID> {
+        self.physics.get_overlap_list(id)
+    }
+}

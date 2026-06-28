@@ -303,19 +303,11 @@ impl World {
         self.event_bus.borrow_mut().push(Box::new(closure));
     }
 
-    pub fn query<T: 'static>(&self) -> impl Iterator<Item = &T> + use<'_, T> {
-       Registry::get_entry::<T>().arena.iter().map(|(_index, item)| &item.1)
-    }
-
-    pub fn query_id<T: 'static>(&self) -> impl Iterator<Item = &(ID<T>,T)> + use<'_, T> {
+    pub fn query<T: 'static>(&self) -> impl Iterator<Item = &(ID<T>,T)> + use<'_, T> {
         Registry::get_entry::<T>().arena.iter().map(|(_index, item)| item)
     }
 
-    pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut T> + use<'_, T> {
-        Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| &mut item.1)
-    }
-
-    pub fn query_id_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut (ID<T>,T)> + use<'_, T> {
+    pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut (ID<T>,T)> + use<'_, T> {
         Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| item)
     }
 

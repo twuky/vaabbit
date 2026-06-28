@@ -64,10 +64,11 @@ fn main() {
 
         vib.clear_screen(Color::new(64,64,64,255));
 
-        for (_id, rect) in world.query_id::<Rect>() {
-            let pos = world.get_pos(_id);
+        for (id, rect) in world.query::<Rect>() {
+            let pos = world.get_pos(id).clone();
             let mut color = Color::new(255,255,255,255);
-            let collided = rect.get_colliding_bodies(&world).len();
+            let collided = world.get_colliding_bodies(&id).len();
+
             if collided > 0 {
                 color = Color::new(255,0,0,255);
             }
