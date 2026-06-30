@@ -1,10 +1,12 @@
+use std::cell::RefCell;
+
 use rapidhash::RapidHashMap;
 
 use anymap::AnyMap;
 use glam::Vec2;
 use slotmap::{DefaultKey, SecondaryMap, SlotMap};
 use smallvec::SmallVec;
-use crate::{ID, TypedID, physics::{dynamictree::DynamicTree}, shapes::{AABB}};
+use crate::{ID, TypedID, physics::{dynamictree::DynamicTree, quadtree::QuadTree}, shapes::AABB};
 use crate::physics::physicsbody::PhysicsBody;
 
 pub struct PhyysicsEntry<T> {
@@ -22,6 +24,9 @@ pub(crate) struct Physics {
 
     //tree: QuadTree<slotmap::DefaultKey>,
     tree: DynamicTree<slotmap::DefaultKey>,
+    quadtree: QuadTree<slotmap::DefaultKey>,
+
+    using_quadtree: bool,
     to_delete: SecondaryMap<slotmap::DefaultKey, ()>,
 
     // late collision detection. consumed by an object when it updates for events created by other object movement
@@ -30,6 +35,7 @@ pub(crate) struct Physics {
     pub late_collision_exit: RapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
 
     tree_bounds: AABB,
+    queries_last_frame: RefCell<u64>,
 }
 
 impl Physics {
@@ -37,14 +43,18 @@ impl Physics {
         Self {
             physics_bodies: SlotMap::new(),
             entities: AnyMap::new(),
-            //tree: QuadTree::new(size.width(), size.height(), 12),
+
             tree: DynamicTree::new(),
+            quadtree: QuadTree::new(size.width(), size.height(), 12),
+
+            using_quadtree: false,
             to_delete: SecondaryMap::new(),
 
             late_collision_enter: RapidHashMap::default(),
             late_collision_exit: RapidHashMap::default(),
 
             tree_bounds: size,
+            queries_last_frame: std::cell::RefCell::new(0),
         }
     }
 
@@ -111,7 +121,11 @@ impl Physics {
         let _ = entry.body_indices.insert(id.index, idx);
         let _ = entry.overlap_list.insert(id.index, Vec::new());
 
-        self.tree.insert(idx, &bounds);
+        if self.using_quadtree {
+            self.quadtree.insert(idx, &bounds);
+        } else {
+            self.tree.insert(idx, &bounds);
+        }
     }
 
     #[inline(always)]
@@ -152,7 +166,11 @@ impl Physics {
         let old_entry = entry.body_indices.insert(id.index, new_idx);
 
         bounds.expand(crate::physics::TREE_BOUNDS_PADDING);
-        self.tree.insert(new_idx, &bounds);
+        if self.using_quadtree {
+            self.quadtree.insert(new_idx, &bounds);
+        } else {
+            self.tree.insert(new_idx, &bounds);
+        }
 
         if let Some(old_idx) = old_entry {
             self.to_delete.insert(old_idx, ());
@@ -170,9 +188,9 @@ impl Physics {
     }
 
     pub fn cleanup(&mut self) {
-
-        //self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 12); // quadtree
+        self.quadtree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 12); // quadtree
         self.tree.clear(); // dynamictree
+
         
         //we'll try to calculate the smallest bounds of all the bodies
         let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
@@ -185,52 +203,115 @@ impl Physics {
             min_bounds.min = min_bounds.min.min(bounds.min);
             min_bounds.max = min_bounds.max.max(bounds.max);
             //self.tree.insert_with_rebalance(id, &bounds);
-            self.tree.insert(id, &bounds);
+
+            if self.using_quadtree {
+                self.quadtree.insert_with_rebalance(id, &bounds);
+            } else {
+                self.tree.insert(id, &bounds);
+            }
         }
         self.to_delete.clear();
         min_bounds.min -= 32.0;
         min_bounds.max += 32.0;
         self.tree_bounds = min_bounds;
+
+        let queries = *self.queries_last_frame.borrow() as usize;
+        let entities = self.physics_bodies.len();
+
+        if entities > 1000 && queries >= entities * 10 {
+            self.using_quadtree = false;
+        } else {
+            self.using_quadtree = true;
+        }
+        self.using_quadtree = true;
+
+        // println!("physics queries last frame: {}", queries);
+        // println!("entities last frame: {}", self.physics_bodies.len());
+        // println!("using quadtree: {}", self.using_quadtree);
+        self.queries_last_frame.replace(0);
     }
 
     pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>) {
-        let q = self.tree.query(bounds);
-
-        for (idx, _aabb) in q {
+        if self.using_quadtree {
+            let q = self.quadtree.query(bounds);
+            for (idx, _aabb) in q {
             if self.to_delete.contains_key(*idx) {continue}
             
             if let Some(body) = self.physics_bodies.get(*idx) {
                 out.push(body);
             }
         }
+        } else {
+            let q = self.tree.query(bounds);
+                for (idx, _aabb) in q {
+                if self.to_delete.contains_key(*idx) {continue}
+                
+                if let Some(body) = self.physics_bodies.get(*idx) {
+                    out.push(body);
+                }
+            }
+        }
+
+        
+        *self.queries_last_frame.borrow_mut() += 1;
     }
 
     pub fn query_filtered<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>, filter: impl Fn(&PhysicsBody) -> bool) {
-        let q = self.tree.query(bounds);
+        if self.using_quadtree {
+            let q = self.quadtree.query(bounds);
 
-        for (idx, _aabb) in q {
-            if self.to_delete.contains_key(*idx) {continue}
-            
-            if let Some(body) = self.physics_bodies.get(*idx) {
-               if filter(body) {
-                   out.push(body);
-               }
+            for (idx, _aabb) in q {
+                if self.to_delete.contains_key(*idx) {continue}
+                
+                if let Some(body) = self.physics_bodies.get(*idx) {
+                    if filter(body) {
+                        out.push(body);
+                    }
+                }
+            }
+        } else {
+            let q = self.tree.query(bounds);
+
+            for (idx, _aabb) in q {
+                if self.to_delete.contains_key(*idx) {continue}
+                
+                if let Some(body) = self.physics_bodies.get(*idx) {
+                    if filter(body) {
+                        out.push(body);
+                    }
+                }
             }
         }
+        *self.queries_last_frame.borrow_mut() += 1;
     }
 
     pub(crate) fn query_against_id<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>, id: TypedID) {
-        let q = self.tree.query(bounds);
+        if self.using_quadtree {
+            let q = self.quadtree.query(bounds);
 
-        for (idx, _aabb) in q {
-            if self.to_delete.contains_key(*idx) {continue}
-            
-            if let Some(body) = self.physics_bodies.get(*idx) {
-               if body.id != id {
-                   out.push(body);
-               }
+            for (idx, _aabb) in q {
+                if self.to_delete.contains_key(*idx) {continue}
+                
+                if let Some(body) = self.physics_bodies.get(*idx) {
+                    if body.id != id {
+                        out.push(body);
+                    }
+                }
+            }
+        } else {
+            let q = self.tree.query(bounds);
+
+            for (idx, _aabb) in q {
+                if self.to_delete.contains_key(*idx) {continue}
+                
+                if let Some(body) = self.physics_bodies.get(*idx) {
+                if body.id != id {
+                    out.push(body);
+                }
+                }
             }
         }
+        *self.queries_last_frame.borrow_mut() += 1;
     }
 
     pub fn get_debug_info(&self) -> Vec<(usize, AABB)> {

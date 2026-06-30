@@ -6,7 +6,7 @@ use vaabbit::{physics::{dynamictree, quadtree}, shapes::AABB};
 fn main() {
     macroquad::prelude::rand::srand(8694);
 
-    let total = 1000;
+    let total = 10000;
 
     let mut items = Vec::new();
     for i in 0..total {
@@ -68,7 +68,7 @@ fn main() {
     println!("dynamic tree query time: {}", t.elapsed().as_secs_f64());
 
     for (q_res, d_res) in results_quadtree.iter().zip(results_dynamic_tree.iter()) {
-        println!("length q: {}, d: {}", q_res.len(), d_res.len());
+        //println!("length q: {}, d: {}", q_res.len(), d_res.len());
     }
     
 }
