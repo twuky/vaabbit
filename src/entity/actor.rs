@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use glam::Vec2;
-use rapidhash::RapidHashSet;
+use rapidhash::{HashSetExt, RapidHashSet};
 use smallvec::SmallVec;
 
 use crate::{entity::{ID, TypedID}, physics::{PhysicsBody, PhysicsClass}, world::{Registry, World}};
@@ -192,19 +192,15 @@ impl World {
 
         let overlap_list = self.physics.get_overlap_list(&id);
         // new objects we are overlapping with after movement
-        let mut new_overlaps = Vec::with_capacity(2);
+        let mut new_overlaps = Vec::with_capacity(4);
         // objects we are no longer overlapping with after movement
-        let mut overlap_exits = Vec::with_capacity(2);
+        let mut overlap_exits = Vec::with_capacity(4);
 
-        // any IDs that are in the overlap list but not in the query are no longer overlapping
-        for ov_id in overlap_list {
-            if !query.iter().any(|c| c.id == *ov_id) {
-                overlap_exits.push(*ov_id);
-            }
-        }
+        let mut query_set = RapidHashSet::<TypedID>::with_capacity(query.len());
 
         // lifecycle: collision start
         for collided in query {
+            query_set.insert(collided.id);
             if overlap_list.contains(&collided.id) {
                 continue; 
             }
@@ -215,6 +211,13 @@ impl World {
                 self.with_world(&id, move |ett, world| {
                     ett.on_collision(&id, other_id, world);
                 });
+            }
+        }
+
+        // any IDs that are in the overlap list but not in the query are no longer overlapping
+        for ov_id in overlap_list {
+            if !query_set.contains(ov_id) {
+                overlap_exits.push(*ov_id);
             }
         }
 
