@@ -1,5 +1,6 @@
 use std::any::TypeId;
 use glam::Vec2;
+use rapidhash::RapidHashSet;
 use smallvec::SmallVec;
 
 use crate::{entity::{ID, TypedID}, physics::{PhysicsBody, PhysicsClass}, world::{Registry, World}};
@@ -99,7 +100,7 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     }
 
     // Returns a list of all actors that are currently colliding with this actor
-    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a Vec<TypedID> {
+    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a RapidHashSet<TypedID> {
         let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.physics.get_overlap_list(id)
     }
@@ -204,7 +205,9 @@ impl World {
 
         // lifecycle: collision start
         for collided in query {
-            if overlap_list.contains(&collided.id) { continue; }
+            if overlap_list.contains(&collided.id) {
+                continue; 
+            }
             // near phase collision
             if new_body.overlaps(collided) {
                 let other_id = collided.id;

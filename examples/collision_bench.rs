@@ -49,7 +49,6 @@ fn main() {
     rand::srand(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64);
 
     let offset = glam::Vec2::new(-640.0, -360.0);
-    let offset = glam::Vec2::new(-640.0, -360.0);
 
     for _ in 0..5000 {
         let id = world.add_actor(Rect::new());

@@ -42,9 +42,7 @@ impl<T> Node<T> where T: Copy {
     pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         if let Some(children) = &mut self.children {
             for child in children.iter_mut() {
-                let mut expanded = child.node_bounds;
-                //expanded.expand(32.0);
-                if bounds.is_within_aabb(&expanded) {
+                if bounds.is_within_aabb(&child.node_bounds) {
                     child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
                     return;
                 }
@@ -161,9 +159,6 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
     pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, AABB); 16]> {
         let mut out = smallvec![];
 
-        // Safety: query is not recursive and is the only user of the scratch
-        // stack. The raw node pointers stay valid for 'a because &self borrows
-        // the whole tree, which is never mutated during the query.
         let stack = unsafe { &mut *self.query_stack.get() };
         unsafe {stack.set_len(0);}
         stack.push(&self.root as *const Node<T>);
@@ -177,15 +172,42 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
             cursor += 1;
 
             if let Some(children) = &node.children {
-                for child in children.iter() {
-                    if bounds.overlaps_aabb(&child.node_bounds) {
-                        #[cfg(target_arch = "x86_64")]
-                        unsafe {
-                            use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                            _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
-                        }
-                        stack.push(child as *const Node<T>);
+                let mut child;
+                child = &children[0];
+                if bounds.overlaps_aabb(&child.node_bounds) {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
                     }
+                    stack.push(child as *const Node<T>);
+                }
+                child = &children[1];
+                if bounds.overlaps_aabb(&child.node_bounds) {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                    }
+                    stack.push(child as *const Node<T>);
+                }
+                child = &children[2];
+                if bounds.overlaps_aabb(&child.node_bounds) {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                    }
+                    stack.push(child as *const Node<T>);
+                }
+                child = &children[3];
+                if bounds.overlaps_aabb(&child.node_bounds) {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                    }
+                    stack.push(child as *const Node<T>);
                 }
             }
 
