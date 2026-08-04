@@ -1,34 +1,34 @@
 use std::cell::RefCell;
 
-use rapidhash::{RapidHashMap, RapidHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use anymap::AnyMap;
 use glam::Vec2;
-use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+use vibarena::{Arena, ArenaMap, Key, KeySet};
 use smallvec::SmallVec;
 use crate::{ID, TypedID, physics::{dynamictree::DynamicTree, quadtree::QuadTree}, shapes::AABB};
 use crate::physics::physicsbody::PhysicsBody;
 
 pub struct PhyysicsEntry<T> {
     // source of truth for each body's index in the physics_bodies slotmap
-    pub body_indices: SecondaryMap<slotmap::DefaultKey, slotmap::DefaultKey>,
+    pub body_indices: ArenaMap<Key>,
     // each body maintains a list of current overlaps
-    pub overlap_list: SecondaryMap<slotmap::DefaultKey, RapidHashSet<TypedID>>,
+    pub overlap_list: ArenaMap<FxHashSet<TypedID>>,
 
     pub _type: std::marker::PhantomData<T>,
 }
 
 pub(crate) struct Physics {
-    physics_bodies: SlotMap<slotmap::DefaultKey, PhysicsBody>,
+    physics_bodies: Arena<PhysicsBody>,
     entities: AnyMap,
 
-    tree: QuadTree<slotmap::DefaultKey>,
-    to_delete: SecondaryMap<slotmap::DefaultKey, ()>,
+    tree: QuadTree<Key>,
+    to_delete: vibarena::KeySet,
 
     // late collision detection. consumed by an object when it updates for events created by other object movement
-    pub late_collision_enter: RapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
+    pub late_collision_enter: FxHashMap<TypedID, SmallVec<[TypedID; 8]>>,
     // late collision detection. consumed by an object when it updates for events created by other object movement
-    pub late_collision_exit: RapidHashMap<TypedID, SmallVec<[TypedID; 8]>>,
+    pub late_collision_exit: FxHashMap<TypedID, SmallVec<[TypedID; 8]>>,
 
     tree_bounds: AABB,
     queries_last_frame: RefCell<u64>,
@@ -37,31 +37,31 @@ pub(crate) struct Physics {
 impl Physics {
     pub fn new(size: AABB) -> Self {
         Self {
-            physics_bodies: SlotMap::new(),
+            physics_bodies: Arena::new(),
             entities: AnyMap::new(),
 
             tree: QuadTree::new(size.width(), size.height(), 12),
 
-            to_delete: SecondaryMap::new(),
+            to_delete: KeySet::default(),
 
-            late_collision_enter: RapidHashMap::default(),
-            late_collision_exit: RapidHashMap::default(),
+            late_collision_enter: FxHashMap::default(),
+            late_collision_exit: FxHashMap::default(),
 
             tree_bounds: size,
             queries_last_frame: std::cell::RefCell::new(0),
         }
     }
 
-    pub fn get_overlap_list<T: 'static>(&self, id: &ID<T>) -> &RapidHashSet<TypedID> {
+    pub fn get_overlap_list<T: 'static>(&self, id: &ID<T>) -> &FxHashSet<TypedID> {
         let entry = self.entities.get::<PhyysicsEntry<T>>().unwrap();
-        let overlap_list = entry.overlap_list.get(id.index).unwrap();
+        let overlap_list = entry.overlap_list.get(&id.index).unwrap();
         overlap_list
     }
 
     pub fn update_overlap_list<T: 'static>(&mut self, id: &ID<T>, overlap_list: &[TypedID], exit_list: &[TypedID]) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
         // only add items that are not already in the list
-        let list = entry.overlap_list.get_mut(id.index).unwrap();
+        let list = entry.overlap_list.get_mut(&id.index).unwrap();
         
         for item in overlap_list {
             if !list.contains(item) {
@@ -92,16 +92,16 @@ impl Physics {
 
     pub(crate) fn register_type<T: 'static>(&mut self) {
         self.entities.insert::<PhyysicsEntry<T>>( PhyysicsEntry { 
-            body_indices: SecondaryMap::new(),
-            overlap_list: SecondaryMap::new(),
+            body_indices: ArenaMap::default(),
+            overlap_list: ArenaMap::default(),
             _type: std::marker::PhantomData 
         });
     }
 
     #[inline(always)]
-    pub fn idx_of<T: 'static>(&self, id: &ID<T>) -> Option<DefaultKey> {
+    pub fn idx_of<T: 'static>(&self, id: &ID<T>) -> Option<Key> {
         let entry = self.entities.get::<PhyysicsEntry<T>>().unwrap();
-        entry.body_indices.get(id.index).cloned()
+        entry.body_indices.get(&id.index).cloned()
     }
 
     pub fn add_body<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
@@ -113,7 +113,7 @@ impl Physics {
         
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
         let _ = entry.body_indices.insert(id.index, idx);
-        let _ = entry.overlap_list.insert(id.index, RapidHashSet::default());
+        let _ = entry.overlap_list.insert(id.index, FxHashSet::default());
 
         self.tree.insert(idx, &bounds);
     }
@@ -121,28 +121,28 @@ impl Physics {
     #[inline(always)]
     pub fn get_body<T: 'static>(&self, id: &ID<T>) -> Option<&PhysicsBody> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(id.index)?;
+        let idx = entry.body_indices.get(&id.index)?;
         self.physics_bodies.get(*idx)
     }
 
     #[inline(always)]
     pub fn get_body_pos<T: 'static>(&self, id: &ID<T>) -> Option<Vec2> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(id.index)?;
+        let idx = entry.body_indices.get(&id.index)?;
         Some(self.physics_bodies.get(*idx)?.pos())
     }
 
     #[inline(always)]
     pub fn get_body_mut<T: 'static>(&mut self, id: &ID<T>) -> Option<&mut PhysicsBody> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(id.index)?;
+        let idx = entry.body_indices.get(&id.index)?;
         self.physics_bodies.get_mut(*idx)
     }
 
     #[inline(always)]
     pub fn update_body_in_place<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        let idx = entry.body_indices.get(id.index).unwrap();
+        let idx = entry.body_indices.get(&id.index).unwrap();
         *self.physics_bodies.get_mut(*idx).unwrap() = body; 
     }
     
@@ -160,7 +160,7 @@ impl Physics {
         self.tree.insert(new_idx, &bounds);
 
         if let Some(old_idx) = old_entry {
-            self.to_delete.insert(old_idx, ());
+            self.to_delete.insert(old_idx);
             self.physics_bodies.remove(old_idx);
         }
         
@@ -168,10 +168,10 @@ impl Physics {
 
     pub fn delete_body<T: 'static>(&mut self, id: &ID<T>) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        let idx = entry.body_indices.get(id.index).unwrap();
+        let idx = entry.body_indices.get(&id.index).unwrap();
 
         self.physics_bodies.remove(*idx);
-        self.to_delete.insert(*idx, ());
+        self.to_delete.insert(*idx);
     }
 
     pub fn cleanup(&mut self) {
@@ -180,10 +180,10 @@ impl Physics {
         //we'll try to calculate the smallest bounds of all the bodies
         let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
-        for (id, _d) in self.to_delete.iter() {
-            self.physics_bodies.remove(id);
+        for id in &self.to_delete {
+            self.physics_bodies.remove(*id);
         }
-        for (id, body) in self.physics_bodies.iter() {
+        for (id, body) in self.physics_bodies.iter_keyed() {
             let bounds = body.bounds();
             min_bounds.min = min_bounds.min.min(bounds.min);
             min_bounds.max = min_bounds.max.max(bounds.max);
@@ -204,7 +204,7 @@ impl Physics {
     pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>) {
         let q = self.tree.query(bounds);
             for (idx, _aabb) in q {
-            if self.to_delete.contains_key(*idx) {continue}
+            if self.to_delete.contains(idx) {continue}
             
             if let Some(body) = self.physics_bodies.get(*idx) {
                 out.push(body);
@@ -218,7 +218,7 @@ impl Physics {
         let q = self.tree.query(bounds);
 
         for (idx, _aabb) in q {
-            if self.to_delete.contains_key(*idx) {continue}
+            if self.to_delete.contains(idx) {continue}
             
             if let Some(body) = self.physics_bodies.get(*idx) {
                 if filter(body) {
@@ -230,11 +230,11 @@ impl Physics {
         *self.queries_last_frame.borrow_mut() += 1;
     }
 
-    pub(crate) fn query_against_id<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>, id: TypedID) {
+    pub(crate) fn query_against_id<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 32]>, id: TypedID) {
         let q = self.tree.query(bounds);
 
         for (idx, _aabb) in q {
-            if self.to_delete.contains_key(*idx) {continue}
+            if self.to_delete.contains(idx) {continue}
             
             if let Some(body) = self.physics_bodies.get(*idx) {
             if body.id != id {
@@ -252,7 +252,7 @@ impl Physics {
 }
 
 impl crate::world::World {
-    pub fn get_colliding_bodies<T: 'static>(&self, id: &ID<T>) -> &RapidHashSet<TypedID> {
+    pub fn get_colliding_bodies<T: 'static>(&self, id: &ID<T>) -> &FxHashSet<TypedID> {
         self.physics.get_overlap_list(id)
     }
 }

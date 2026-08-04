@@ -5,11 +5,13 @@ use vibbit::{Vibbit, Color};
 struct Bunny {
     vel: glam::Vec2,
     color: Color,
+    pos: glam::Vec2,
 }
 
 impl Bunny {
     fn new() -> Self {
         Self {
+            pos: glam::Vec2::ZERO,
             vel: glam::Vec2::new(rand::gen_range(-1.0, 1.0), rand::gen_range(-1.0, 1.0)),
             color: Color::from_normalized(rand::gen_range(0.0, 1.0), rand::gen_range(0.0, 1.0), rand::gen_range(0.0, 1.0), 1.0),
         }
@@ -20,22 +22,21 @@ impl Actor<()> for Bunny {
     #[inline(always)]
     fn update(&mut self, _id: &ID<Self>, _world: &mut World, ctx: &mut ()) {
         let vel = self.vel;
-        let pos = self.move_by(&vel, _world);
+        self.pos += vel;
         
-        if pos.x < 0.0 {
+        if self.pos.x < 0.0 {
             self.vel.x *= -1.0;
-        } else if pos.x > 640.0 {
+        } else if self.pos.x > 640.0 {
             self.vel.x *= -1.0;
         }
 
-        if pos.y < 0.0 {
+        if self.pos.y < 0.0 {
             self.vel.y *= -1.0;
-        } else if pos.y > 480.0 {
+        } else if self.pos.y > 480.0 {
             self.vel.y *= -1.0;
         }
     }
 }
-
 
 fn main() {
     let mut vib = Vibbit::new(640, 480, "bunnymark");
@@ -62,8 +63,7 @@ fn main() {
         vib.clear_screen(Color::new(0,0,0,255));
 
         for (_id, bunny) in world.query::<Bunny>() {
-            let pos = world.get_pos(_id);
-            vib.draw_texture(tex, offset + pos, bunny.color);
+            let pos = bunny.pos;
             vib.draw_texture(tex, offset + pos, bunny.color);
         }
 

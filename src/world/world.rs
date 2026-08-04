@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{TypeId, type_name};
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
@@ -9,12 +9,13 @@ use crate::TypedID;
 use crate::events::{EventBus, EventQueue};
 use crate::physics::{Physics};
 use crate::shapes::AABB;
-use crate::entity::{Actor, ID};
+use crate::entity::{Actor, Draw, ID};
 use crate::world::registry::Registry;
 pub struct World {
     pub(crate) registry: Registry,
     pub logic_update: Duration,
     update_methods_any: AnyMap,
+    draw_methods_any: AnyMap,
 
     event_bus: RefCell<EventBus>,
 
@@ -36,6 +37,7 @@ impl World {
         Self {
             registry: Registry::new(),
             update_methods_any: AnyMap::new(),
+            draw_methods_any: AnyMap::new(),
             logic_update: Duration::from_millis(16),
             physics: Physics::new(AABB { min: vec2(-2048.0, -2048.0), max: vec2(2048.0, 2048.0) }),
             event_bus: RefCell::new(EventBus::new()),
@@ -76,9 +78,12 @@ impl World {
         if !self.update_methods_any.contains::<Vec<fn(&mut World, &mut P)>>() {
             let update_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
             self.update_methods_any.insert(update_methods);
+            let draw_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
+            self.draw_methods_any.insert(draw_methods);
         }
 
         self.update_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>().unwrap().push(T::update_system);
+        self.draw_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>().unwrap().push(T::draw_system);
 
         Registry::create_entry::<T>();
         self.physics.register_type::<T>();
@@ -106,6 +111,7 @@ impl World {
     }
 
     pub fn remove_actor<T: Actor<P> + 'static, P: 'static>(&mut self, id: &ID<T>) {
+        self.registry.recently_removed.insert(id.into_typed_id());
         let id = *id;
         self.with_world(&id, move |_ett, world| {
             world.current_actor = Some(TypedID::from_id(id));
@@ -115,14 +121,11 @@ impl World {
             // remove from events system
 
             // remove from actor registry
-            let actor = Registry::remove_actor(&id);
+            Registry::remove_actor(&id);
 
             // remove from physics
             world.physics.delete_body(&id);
-
-            if actor.is_some() {
-                world.registry.recently_removed.insert(id.into_typed_id());
-            }
+            world.registry.recently_removed.insert(id.into_typed_id());
         });
     }
 
@@ -136,6 +139,12 @@ impl World {
         } else {
             println!("WARNING: no update methods registered for the generic type {:?}", std::any::type_name::<P>());
             panic!("Please make sure the argument passed into update_systems(), \"{}\",is the same as the generic type of the actor structs", std::any::type_name::<P>());
+        }
+
+        if let Some(systems) = self.draw_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>() {
+            for system in systems.clone() {
+                system(self, ctx);
+            }
         }
 
         self.physics.cleanup();
@@ -200,11 +209,11 @@ impl World {
     }
 
     pub fn query<T: 'static>(&self) -> impl Iterator<Item = &(ID<T>,T)> + use<'_, T> {
-        Registry::get_entry::<T>().arena.iter().map(|(_index, item)| item)
+        Registry::get_entry::<T>().arena.iter_keyed().map(|(_index, item)| item)
     }
 
     pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = &mut (ID<T>,T)> + use<'_, T> {
-        Registry::get_entry_mut::<T>().arena.iter_mut().map(|(_index, item)| item)
+        Registry::get_entry_mut::<T>().arena.iter_keyed_mut().map(|(_index, item)| item)
     }
 
     pub fn get_singleton<T: 'static>(&self) -> Option<&T> {

@@ -53,7 +53,7 @@ async fn main() {
         
         for item in overlaps {
             draw_aabb(*item.1, WHITE);
-            if item.1.overlaps_aabb(&test) {
+            if item.1.overlaps_aabb(test) {
                 draw_aabb(*item.1, RED)
             }
         }

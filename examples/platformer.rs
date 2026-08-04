@@ -26,7 +26,7 @@ impl Actor<Vibbit> for Block {
     }
 
     fn update(&mut self, id: &ID<Self>, world: &mut World, vib: &mut Vibbit) where Self: Sized {
-        let body = world.get_physics_body(&id).unwrap();
+        let body = world.get_physics_body(&id).unwrap_or_else(|| panic!("actor not found: {:?}", id));
         let color = vibbit::Color::new(255,255,255,255);
         vib.draw_rect(body.pos(), body.bounds().width(), body.bounds().height(), color);
 
@@ -132,7 +132,7 @@ impl Actor<Vibbit> for Player {
 pub fn main() {
     let mut world = vaabbit::world::World::new();
     let mut vib = Vibbit::new(1280, 720, "context_state");
-    vib.set_target_fps(60.0);
+    vib.cfg.set_target_fps(60.0);
 
     let p_id = world.add_actor(Player {vel: 0.0});
     let g_id = world.add_actor(Ground {});
@@ -149,8 +149,7 @@ pub fn main() {
     loop {
         vib.clear_screen(vibbit::Color::new(0,0,0,255));
         let pos = world.get_pos(&p_id);
-        camera.pos.x = pos.x * 2.0;
-        camera.pos.y = pos.y * 2.0;
+        camera.pos = pos;
 
         vib.gfx_set_camera(camera);
         // Since our actor logic relies on the vibbit context, we need to pass it to the update method.

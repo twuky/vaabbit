@@ -1,11 +1,46 @@
 use std::any::TypeId;
+use rustc_hash::FxHashSet;
 use glam::Vec2;
-use rapidhash::{HashSetExt, RapidHashSet};
 use smallvec::SmallVec;
 
 use crate::{entity::{ID, TypedID}, physics::{PhysicsBody, PhysicsClass}, world::{Registry, World}};
 
-pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
+pub trait Draw<P: 'static> where Self: 'static, Self: Sized, Self: Actor<P> {
+    /// override this to disable drawing for your type, saving some performance
+    const DOES_NOT_DRAW: bool = false;
+
+    fn draw(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized {
+    }
+
+    fn get_z(&self, world: &mut World) -> i32 where Self: Sized { 0 }
+
+    fn draw_system(world: &mut World, ctx: &mut P) where Self: Sized {
+        if Self::DOES_NOT_DRAW { return; }
+        let registry_entry = &mut Registry::get_entry_mut::<Self>();
+
+        let mut z_indices = Vec::with_capacity(registry_entry.arena.len());
+
+        for actor in registry_entry.arena.iter_mut() {
+            let id = &actor.0;
+            if world.registry.recently_removed.contains(&id.into_typed_id()) {
+                println!("found in removed {:?}: {:?}", Self::type_name(), id);
+                return;
+            }
+            world.current_actor = Some(TypedID::from_id(*id));
+            z_indices.push(actor.1.get_z(world));
+        }
+
+        z_indices.sort();
+
+        for (i, actor) in registry_entry.arena.iter_mut().enumerate() {
+            let id = &actor.0;
+            world.current_actor = Some(TypedID::from_id(*id));
+            actor.1.draw(id, world, ctx);
+        }
+    }
+}
+impl<P: 'static, T: Actor<P>> Draw<P> for T {}
+pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
     fn update(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized;
 
     #[inline]
@@ -18,39 +53,73 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     // System that updates the actor's state each frame, applying lifecycle hooks
     fn update_system(world: &mut World, ctx: &mut P) where Self: Sized {
         let registry_entry = &mut Registry::get_entry_mut::<Self>();
-        // clone prevents flicker, ie objects spawning in the same frame
-        let entities = registry_entry.entities.to_vec();
 
-        for id in &entities {
-            let entry = registry_entry.arena.get_mut(id.index);
-
-            if let Some(actor) = entry {
-                world.current_actor = Some(TypedID::from_id(actor.0));
-                // late collision lifecycle hook         
-                if let Some(collisions) = world.physics.get_late_collision_enter(id) {
-                    let overlap_list = world.physics.get_overlap_list(id).clone();
-                    world.physics.update_overlap_list(id, &collisions, &[]);
-                    for collided in collisions {
-                        // prevent double collision events if object already collided last frame
-                        if overlap_list.contains(&collided) { continue; }
-                        actor.1.on_collision(id, collided, world);
-                    }
-                }
-                // late collision end lifecycle hook
-                if let Some(collisions) = world.physics.get_late_collision_exit(id) {
-                    world.physics.update_overlap_list(id, &[], &collisions);
-                    for collided in collisions {
-                        actor.1.on_collision_end(id, collided, world);
-                    }
-                }
-                // regular update lifecycle hook
-                actor.1.update(id, world, ctx);
-                world.flush_events();
-            } else {
-                println!("update<{:?}>: actor not found: {:?}", id.type_name(), id.index);
-                println!("perhaps already in use?");
+        for actor in registry_entry.arena.iter_mut() {
+            let id = &actor.0;
+            if world.registry.recently_removed.contains(&id.into_typed_id()) {
+                println!("found in removed {:?}: {:?}", Self::type_name(), id);
+                return;
             }
-        }
+            world.current_actor = Some(TypedID::from_id(actor.0));
+            // late collision lifecycle hook         
+            if let Some(collisions) = world.physics.get_late_collision_enter(id) {
+                let overlap_list = world.physics.get_overlap_list(id).clone();
+                world.physics.update_overlap_list(id, &collisions, &[]);
+                for collided in collisions {
+                    // prevent double collision events if object already collided last frame
+                    if overlap_list.contains(&collided) { continue; }
+                    actor.1.on_collision(id, collided, world);
+                }
+            }
+            // late collision end lifecycle hook
+            if let Some(collisions) = world.physics.get_late_collision_exit(id) {
+                world.physics.update_overlap_list(id, &[], &collisions);
+                for collided in collisions {
+                    actor.1.on_collision_end(id, collided, world);
+                }
+            }
+            // regular update lifecycle hook
+            actor.1.update(id, world, ctx);
+        };
+        world.flush_events();
+
+        // let entities = registry_entry.entities.clone();
+
+        // for idx in entities {
+        //     let entry = registry_entry.arena.get_mut(idx);
+
+        //     if let Some(actor) = entry {
+        //         let id = &actor.0;
+        //         if world.registry.recently_removed.contains(&id.into_typed_id()) {
+        //             println!("found in removed {:?}: {:?}", Self::type_name(), id);
+        //             continue;
+        //         }
+        //         world.current_actor = Some(TypedID::from_id(actor.0));
+        //         // late collision lifecycle hook         
+        //         if let Some(collisions) = world.physics.get_late_collision_enter(id) {
+        //             let overlap_list = world.physics.get_overlap_list(id).clone();
+        //             world.physics.update_overlap_list(id, &collisions, &[]);
+        //             for collided in collisions {
+        //                 // prevent double collision events if object already collided last frame
+        //                 if overlap_list.contains(&collided) { continue; }
+        //                 actor.1.on_collision(id, collided, world);
+        //             }
+        //         }
+        //         // late collision end lifecycle hook
+        //         if let Some(collisions) = world.physics.get_late_collision_exit(id) {
+        //             world.physics.update_overlap_list(id, &[], &collisions);
+        //             for collided in collisions {
+        //                 actor.1.on_collision_end(id, collided, world);
+        //             }
+        //         }
+        //         // regular update lifecycle hook
+        //         actor.1.update(id, world, ctx);
+        //         world.flush_events();
+        //     } else {
+        //         println!("update<{:?}>: actor not found: {:?}", Self::type_name(), idx);
+        //         println!("perhaps already in use?");
+        //     }
+        // }
     }
     
     #[inline(always)]
@@ -60,7 +129,7 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     }
     #[inline(always)]
     // Returns the name of the actor
-    fn type_name(&self) -> &'static str {
+    fn type_name() -> &'static str {
         std::any::type_name::<Self>()
     }
 
@@ -100,7 +169,7 @@ pub trait Actor<P: 'static> where Self: 'static, Self: Sized {
     }
 
     // Returns a list of all actors that are currently colliding with this actor
-    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a RapidHashSet<TypedID> {
+    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a FxHashSet<TypedID> {
         let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.physics.get_overlap_list(id)
     }
@@ -192,11 +261,11 @@ impl World {
 
         let overlap_list = self.physics.get_overlap_list(&id);
         // new objects we are overlapping with after movement
-        let mut new_overlaps = Vec::with_capacity(4);
+        let mut new_overlaps = SmallVec::<[TypedID; 6]>::with_capacity(6);
         // objects we are no longer overlapping with after movement
-        let mut overlap_exits = Vec::with_capacity(4);
+        let mut overlap_exits = SmallVec::<[TypedID; 6]>::with_capacity(6);
 
-        let mut query_set = RapidHashSet::<TypedID>::with_capacity(query.len());
+        let mut query_set = FxHashSet::<TypedID>::with_capacity_and_hasher(query.len(), Default::default());
 
         // lifecycle: collision start
         for collided in query {
@@ -243,10 +312,12 @@ impl World {
         let actor_body = self.physics.get_body(&id).unwrap();
 
         let start_point = actor_body.pos();
-        let end_point = actor_body.pos() + actor_body.pos_remainder + *delta;
-        let _remainder = end_point - end_point.trunc();
+        // bank sub-pixel movement; only whole pixels are ever applied to pos
+        let target = actor_body.pos_remainder + *delta;
+        let move_pixels = target.round();
+        let new_remainder = target - move_pixels;
         // list of pixel positions to check collisions against
-        let movement_steps = crate::math::bresenham_line_movement(start_point, start_point + *delta);
+        let movement_steps = crate::math::bresenham_line_movement(start_point, start_point + move_pixels);
 
         // query area around the actor
         let mut query_bounds = actor_body.bounds();
@@ -370,6 +441,7 @@ impl World {
         }
 
         // commit changes
+        final_body.pos_remainder = new_remainder;
         self.physics.update_overlap_list(&id, &new_overlaps, &overlap_exits);
         self.physics.update_body(&id, final_body);
 

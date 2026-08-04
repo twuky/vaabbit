@@ -1,16 +1,24 @@
 use std::any::TypeId;
 use std::fmt::Debug;
 use std::hash::Hash;
+use nohash_hasher::IsEnabled;
 
 pub struct ID<T: ?Sized> {
-    pub index: slotmap::DefaultKey,
+    pub index: vibarena::Key,
     pub _type: std::marker::PhantomData<T>,
 }
 
-#[derive(Clone, Copy, Eq, Hash)]
+#[derive(Clone, Copy, Eq)]
 pub struct TypedID {
-    pub index: slotmap::DefaultKey,
-    pub type_id: TypeId,
+    index: vibarena::Key,
+    type_id: TypeId,
+}
+
+impl Hash for TypedID {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(((self.index.ver().get() as u64) << 32) | self.index.idx() as u64);
+        self.type_id.hash(state);
+    }
 }
 
 impl TypedID {
@@ -50,7 +58,7 @@ impl PartialEq for TypedID {
 }
 
 impl<T: 'static> ID<T> {
-    pub fn new(index: slotmap::DefaultKey) -> Self {
+    pub fn new(index: vibarena::Key) -> Self {
         Self {
             index,
             _type: std::marker::PhantomData,
@@ -101,12 +109,12 @@ impl<T> Clone for ID<T> {
 impl <T> Copy for ID<T> {}
 
 impl <T> Eq for ID<T> {
-
 }
 
+impl <T> IsEnabled for ID<T> {}
 impl <T> Hash for ID<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.index.hash(state);
+        state.write_u64(((self.index.ver().get() as u64) << 32) | self.index.idx() as u64);
     }
 }
 

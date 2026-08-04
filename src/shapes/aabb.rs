@@ -9,7 +9,6 @@ pub struct AABB {
 }
 
 
-
 impl AABB {
     pub const ZERO: AABB = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
@@ -34,12 +33,12 @@ impl AABB {
     }
 
     #[inline(always)]
-    pub fn overlaps_aabb(&self, other: &AABB) -> bool {
+    pub fn overlaps_aabb(&self, other: AABB) -> bool {
         #[cfg(target_arch = "x86_64")] {
             use std::arch::x86_64::*;
             unsafe {
                 let a = _mm_loadu_ps(self  as *const AABB as *const f32);
-                let b = _mm_loadu_ps(other as *const AABB as *const f32);
+                let b = _mm_loadu_ps(&other as *const AABB as *const f32);
                 // lhs = [self.min.x, self.min.y, other.min.x, other.min.y]
                 // rhs = [other.max.x, other.max.y, self.max.x, self.max.y]
                 let lhs = _mm_movelh_ps(a, b);
@@ -70,12 +69,12 @@ impl AABB {
     }
 
     #[inline(always)]
-    pub fn is_within_aabb(&self, other: &AABB) -> bool {
+    pub fn is_within_aabb(&self, other: AABB) -> bool {
         #[cfg(target_arch = "x86_64")] {
             use std::arch::x86_64::*;
             unsafe {
                 let a = _mm_loadu_ps(self  as *const AABB as *const f32);
-                let b = _mm_loadu_ps(other as *const AABB as *const f32);
+                let b = _mm_loadu_ps(&other as *const AABB as *const f32);
                 // lhs = [other.min.x, other.min.y, self.max.x,  self.max.y]
                 // rhs = [self.min.x,  self.min.y,  other.max.x, other.max.y]
                 let lhs = _mm_shuffle_ps(b, a, 0b11100100);
@@ -145,7 +144,7 @@ impl AABB {
     }
 
     pub fn center(&self) -> Vec2 {
-        self.min + self.size() / 2.0
+        self.min + (self.max - self.min) / 2.0
     }
 
     pub fn bottom_left(&self) -> Vec2 {

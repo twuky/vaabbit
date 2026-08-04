@@ -6,7 +6,7 @@ pub mod entity;
 pub mod math;
 
 pub use glam::*;
-pub use entity::{ID, TypedID, Actor};
+pub use entity::{ID, TypedID, Actor, Draw};
 pub use world::World;
 pub use events::Signal;
 

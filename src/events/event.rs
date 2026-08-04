@@ -1,4 +1,4 @@
-use rapidhash::RapidHashMap;
+use rustc_hash::FxHashMap;
 use crate::{World, ID};
 
 pub type Signal<T> = T;
@@ -29,13 +29,13 @@ impl<E> EventListeners<E> {
 }
 
 struct EventQueueEntry<T, E> {
-    pub(crate) emitters: RapidHashMap<ID<T>, EventListeners<E>>,
+    pub(crate) emitters: FxHashMap<ID<T>, EventListeners<E>>,
 }
 
 impl<T, E> EventQueueEntry<T, E> {
     pub fn new() -> Self {
         Self {
-            emitters: RapidHashMap::default(),
+            emitters: FxHashMap::default(),
         }
     }
 }

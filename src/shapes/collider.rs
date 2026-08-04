@@ -17,7 +17,7 @@ impl Collider {
 
     pub fn overlaps(&self, other: &Collider) -> bool {
         match (self, other) {
-            (Collider::AABB(a), Collider::AABB(b)) => a.overlaps_aabb(b),
+            (Collider::AABB(a), Collider::AABB(b)) => a.overlaps_aabb(*b),
             (Collider::CIRCLE(a), Collider::AABB(b)) => a.overlaps_aabb(b),
             (Collider::CIRCLE(a), Collider::CIRCLE(b)) => a.overlaps_circle(b),
             (Collider::AABB(a), Collider::CIRCLE(b)) => a.overlaps_circle(b),

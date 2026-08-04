@@ -1,19 +1,19 @@
-use rapidhash::{HashSetExt, RapidHashSet};
-use slotmap::SlotMap;
+use rustc_hash::{FxHashSet, FxHashMap};
+use vibarena::{Arena, ArenaMap, KeySet};
 use std::{any::TypeId, cell::OnceCell};
 use crate::{TypedID, World, entity::ID};
 
 
 pub(crate) struct RegistryEntry<T> {
-    pub arena: SlotMap<slotmap::DefaultKey,(ID<T>,T)>,
-    pub entities: Vec<ID<T>>,
+    pub arena: Arena<(ID<T>,T)>,
+    pub entities: KeySet,
 }
 
 impl<T: 'static> RegistryEntry<T> {
     pub fn iter_actors<P: 'static>(&mut self, world: &mut World, ctx: &mut P, closure: impl Fn(&mut World, &mut P, &mut ID<T>, &mut T) + 'static) {
-        let entities = self.entities.to_vec();
-        for id in &entities{
-            if let Some((id, actor)) = self.arena.get_mut(id.index) {
+
+        for id in &self.entities{
+            if let Some((id, actor)) = self.arena.get_mut(*id) {
                 closure(world, ctx, id, actor);
             }
         }
@@ -21,8 +21,8 @@ impl<T: 'static> RegistryEntry<T> {
 }
 
 pub(crate) struct Registry {
-    pub types: RapidHashSet<TypeId>,
-    pub recently_removed: RapidHashSet<TypedID>,
+    pub types: FxHashSet<TypeId>,
+    pub recently_removed: FxHashSet<TypedID>,
 }
 
 static mut MAP: OnceCell<anymap::AnyMap> = OnceCell::new();
@@ -33,8 +33,8 @@ impl Registry {
             MAP.get_or_init(|| {anymap::AnyMap::new()});
         }
         Self {
-            types: RapidHashSet::with_capacity(64),
-            recently_removed: RapidHashSet::with_capacity(64),
+            types: FxHashSet::default(),
+            recently_removed: FxHashSet::default(),
         }
     }
 
@@ -58,8 +58,9 @@ impl Registry {
         let map = Self::get_map();
 
         if !map.contains::<RegistryEntry<T>>() {
-            let arena = SlotMap::<slotmap::DefaultKey,(ID<T>,T)>::with_capacity(1024);
-            let entities = Vec::with_capacity(1024);
+            let arena = Arena::<(ID<T>,T)>::with_capacity(1024);
+            let mut entities = KeySet::default();
+            entities.reserve(1024);
 
             entry = RegistryEntry {
                 arena,
@@ -81,7 +82,7 @@ impl Registry {
         });
 
         let id = ID::new(idx);
-        entry.entities.push(id);
+        entry.entities.insert(idx);
 
         id
     }
@@ -89,7 +90,7 @@ impl Registry {
     pub fn remove_actor<T: 'static>(id: &ID<T>) -> Option<T> {
         let entry = Self::get_entry_mut::<T>();
         let entity = entry.arena.remove(id.index)?;
-        entry.entities.retain(|e| e.index != id.index);
+        entry.entities.remove(&id.index);
         Some(entity.1)
     }
 

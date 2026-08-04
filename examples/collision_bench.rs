@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use glam::Vec2;
 use vaabbit::{Actor, ID, TypedID, World, physics::PhysicsClass, shapes::{AABB, Collider}, world};
@@ -43,22 +43,25 @@ impl Actor<()> for Rect {
 
 fn main() {
     let mut vib = Vibbit::new(1280, 720, "bunnymark");
-    vib.set_target_fps(0.0);
+    vib.cfg.set_target_fps(0.0);
     let mut world = vaabbit::world::World::new();
 
     rand::srand(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64);
 
     let offset = glam::Vec2::new(-640.0, -360.0);
 
-    for _ in 0..1000 {
+    for _ in 0..500 {
         let id = world.add_actor(Rect::new());
         world.set_pos(id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
     }
     let font = vib.default_font();
 
     while !vib.should_close() {
+        let t1 = std::time::Instant::now();
         world.update_systems(&mut ());
+        let frametime = std::time::Instant::now().duration_since(t1).as_secs_f64() * 1000.0;
 
+        
         unsafe {DT = vib.get_delta_time(); }
 
         vib.clear_screen(Color::new(64,64,64,255));
@@ -72,10 +75,9 @@ fn main() {
                 color = Color::new(255,0,0,255);
             }
             vib.draw_rect(pos + offset, 32.0, 32.0, color);
-            vib.draw_rect(pos + offset, 32.0, 32.0, color);
-            //vib.draw_text(&font, pos.x + offset.x, pos.y + offset.y, Color::new(0,0,0,255), &format!("{}", rect.collided), 1.0);
         }
-
+        
+        vib.draw_text(&font, 0., 0., Color::new(0,0,0,255), &format!("{}", frametime), 1.0);
         vib.end_frame();
     }
 }

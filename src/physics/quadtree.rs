@@ -8,11 +8,11 @@ const MAX_ELEMENTS: usize = 16;
 pub struct Node<T> {
     pub node_bounds: AABB,
     pub children: Option<Box<[Node<T>; 4]>>,
-    pub elements: SmallVec<[(T, AABB); 16]>,
+    pub elements: SmallVec<[(T, AABB); 32]>,
 }
 
 impl<T> Node<T> where T: Copy {
-    pub fn new(bounds: AABB, _depth: u8) -> Self {
+    pub fn new(bounds: AABB) -> Self {
         Self {
             node_bounds: bounds,
             elements: SmallVec::new(),
@@ -39,10 +39,11 @@ impl<T> Node<T> where T: Copy {
         }
     }
 
-    pub fn insert(&mut self, data: &T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
+    #[inline]
+    pub fn insert(&mut self, data: T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         if let Some(children) = &mut self.children {
             for child in children.iter_mut() {
-                if bounds.is_within_aabb(&child.node_bounds) {
+                if bounds.is_within_aabb(child.node_bounds) {
                     child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
                     return;
                 }
@@ -50,49 +51,40 @@ impl<T> Node<T> where T: Copy {
         };
 
         // as a last resort, it is outside the tree, so this should be the root
-        self.elements.push((*data, *bounds));
-
+        self.elements.push((data, *bounds));
         if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
         }
     }
 
+    #[inline]
+    #[cold]
     pub fn rebalance(&mut self, (depth, max_depth): (u8, u8)) {
         let d = depth + 1;
         let size = self.node_bounds.size() / 2.0;
 
-        let create_child = |pos| {
-            Node::new(AABB { min: pos, max: pos + size }, d)
-        };
+        let create_child = |pos| Node::new(AABB { min: pos, max: pos + size });
 
-        
-        match self.children {
-            Some(_) => {},
-            None => {
-                self.children = Some(Box::new([
-                    create_child(vec2(self.node_bounds.pos().x, self.node_bounds.pos().y + size.y)),
-                    create_child(self.node_bounds.center()),
-                    create_child(self.node_bounds.bottom_left()),
-                    create_child(vec2(self.node_bounds.pos().x + size.x, self.node_bounds.pos().y)),
-                ]));
-            },
-        }
+        let children = self.children.get_or_insert_with(|| {
+            Box::new([
+                create_child(vec2(self.node_bounds.pos().x, self.node_bounds.pos().y + size.y)),
+                create_child(self.node_bounds.center()),
+                create_child(self.node_bounds.bottom_left()),
+                create_child(vec2(self.node_bounds.pos().x + size.x, self.node_bounds.pos().y)),
+            ])
+        });
 
         let to_replace = std::mem::replace(&mut self.elements, smallvec![]);
 
         for el in to_replace {
             let mut inserted = false;
-
-            if let Some(children) = &mut self.children {
-                for child in children.iter_mut() {
-                    if el.1.is_within_aabb(&child.node_bounds) {
-                        child.insert(&el.0, &el.1, (d, max_depth), true);
-                        inserted = true;
-                        break;
-                    }
-                };
+            for child in children.iter_mut() {
+                if el.1.is_within_aabb(child.node_bounds) {
+                    child.insert(el.0, &el.1, (d, max_depth), true);
+                    inserted = true;
+                    break;
+                }
             }
-
             if !inserted {
                 self.elements.push(el);
             }
@@ -140,7 +132,7 @@ pub struct QuadTree<T> {
     // reusable traversal stack for query; holds lifetime-erased node pointers so
     // it can live across calls (the tree isn't mutated during a query). SmallVec
     // keeps small queries inline while reusing a grown buffer for large ones.
-    query_stack: UnsafeCell<SmallVec<[*const Node<T>; 16]>>,
+    query_stack: UnsafeCell<SmallVec<[*const Node<T>; 64]>>,
 }
 
 impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
@@ -150,14 +142,14 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
             max: Vec2::new(width, height) * 1.5,
         };
         Self {
-            root: Node::new(bounds, 0),
+            root: Node::new(bounds),
             max_depth,
             query_stack: UnsafeCell::new(SmallVec::new()),
         }
     }
 
-    pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, AABB); 16]> {
-        let mut out = smallvec![];
+    pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, AABB); 32]> {
+        let mut out = SmallVec::<[&'a (T, AABB); 32]>::with_capacity(32);
 
         let stack = unsafe { &mut *self.query_stack.get() };
         unsafe {stack.set_len(0);}
@@ -172,47 +164,20 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
             cursor += 1;
 
             if let Some(children) = &node.children {
-                let mut child;
-                child = &children[0];
-                if bounds.overlaps_aabb(&child.node_bounds) {
-                    #[cfg(target_arch = "x86_64")]
-                    unsafe {
-                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                for child in children.iter().take(4) {
+                    if bounds.overlaps_aabb(child.node_bounds) {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                            _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                        }
+                        stack.push(child as *const Node<T>);
                     }
-                    stack.push(child as *const Node<T>);
-                }
-                child = &children[1];
-                if bounds.overlaps_aabb(&child.node_bounds) {
-                    #[cfg(target_arch = "x86_64")]
-                    unsafe {
-                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
-                    }
-                    stack.push(child as *const Node<T>);
-                }
-                child = &children[2];
-                if bounds.overlaps_aabb(&child.node_bounds) {
-                    #[cfg(target_arch = "x86_64")]
-                    unsafe {
-                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
-                    }
-                    stack.push(child as *const Node<T>);
-                }
-                child = &children[3];
-                if bounds.overlaps_aabb(&child.node_bounds) {
-                    #[cfg(target_arch = "x86_64")]
-                    unsafe {
-                        use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                        _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
-                    }
-                    stack.push(child as *const Node<T>);
                 }
             }
 
             for e in &node.elements {
-                if bounds.overlaps_aabb(&e.1) {
+                if bounds.overlaps_aabb(e.1) {
                     out.push(e);
                 }
             }
@@ -226,11 +191,11 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(&data, &shape.bounds(), (0, self.max_depth), false);
+        self.root.insert(data, &shape.bounds(), (0, self.max_depth), false);
     }
 
     pub fn insert_with_rebalance(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(&data, &shape.bounds(), (0, self.max_depth), true);
+        self.root.insert(data, &shape.bounds(), (0, self.max_depth), true);
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
