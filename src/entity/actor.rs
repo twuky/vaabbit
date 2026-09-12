@@ -52,13 +52,13 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
     #[inline]
     // System that updates the actor's state each frame, applying lifecycle hooks
     fn update_system(world: &mut World, ctx: &mut P) where Self: Sized {
-        let registry_entry = &mut Registry::get_entry_mut::<Self>();
+        let arena = &mut Registry::get_entry_mut::<Self>().arena;
 
-        for actor in registry_entry.arena.iter_mut() {
+        for actor in arena.iter_mut() {
             let id = &actor.0;
             if world.registry.recently_removed.contains(&id.into_typed_id()) {
                 println!("found in removed {:?}: {:?}", Self::type_name(), id);
-                return;
+                continue;
             }
             world.current_actor = Some(TypedID::from_id(actor.0));
             // late collision lifecycle hook         
