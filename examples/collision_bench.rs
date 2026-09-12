@@ -54,7 +54,6 @@ fn main() {
         let id = world.add_actor(Rect::new());
         world.set_pos(id, glam::Vec2::new(rand::gen_range(0.0, 1280.0 - 32.0), rand::gen_range(0.0, 720.0 - 32.0)));
     }
-    let font = vib.default_font();
 
     while !vib.should_close() {
         let t1 = std::time::Instant::now();
@@ -66,7 +65,7 @@ fn main() {
 
         vib.clear_screen(Color::new(64,64,64,255));
 
-        for (id, rect) in world.query::<Rect>() {
+        for (id, _rect) in world.query::<Rect>() {
             let pos = world.get_pos(id).clone();
             let mut color = Color::new(255,255,255,255);
             let collided = world.get_colliding_bodies(&id).len();
@@ -77,7 +76,7 @@ fn main() {
             vib.draw_rect(pos + offset, 32.0, 32.0, color);
         }
         
-        vib.draw_text(&font, 0., 0., Color::new(0,0,0,255), &format!("{}", frametime), 1.0);
+        vib.text(-630., 320., Color::new(0,0,0,255), &format!("{}", frametime), 3.0);
         vib.end_frame();
     }
 }

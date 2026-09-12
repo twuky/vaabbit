@@ -210,10 +210,15 @@ impl World {
         self.physics.get_body(id)
     }
 
+    pub fn update_physics_body<T: 'static + Actor<P>, P: 'static>(&mut self, id: &ID<T>, body: &PhysicsBody) {
+        self.physics.update_body(id, body.clone());
+        self.set_pos(*id, body.pos());
+    }
+
     pub fn set_pos<T: 'static + Actor<P>, P: 'static>(&mut self, id: ID<T>, pos: Vec2) {
         let mut new_body = *self.physics.get_body(&id).unwrap();
         let old_pos = new_body.pos();
-        new_body.set_pos(&pos);
+        new_body.set_pos(pos);
 
         // our tree contains "fat" bounding boxes, so if movement is small,
         // we dont need to rebalance the tree
@@ -339,7 +344,7 @@ impl World {
         for movement in &movement_steps {
             // test new location
             let test_point = final_body.pos() + movement;
-            test_body.set_pos(&test_point);
+            test_body.set_pos(test_point);
 
             // check for collisions
             stopped = false;    
@@ -352,7 +357,7 @@ impl World {
 
             // if not stopped by any collisions, update the final body
             if !stopped {
-                final_body.set_pos(&test_point);
+                final_body.set_pos(test_point);
             }
         }
 
@@ -389,25 +394,25 @@ impl World {
             let other_bounds = other_body.bounds();
 
             if actor_bounds.min.y >= other_bounds.max.y && (actor_bounds.min.y - 1.0) <= other_bounds.max.y {
-                test_body.set_pos(&(result.final_pos + Vec2::new(0.0, -1.0)));
+                test_body.set_pos((result.final_pos + Vec2::new(0.0, -1.0)));
                 if test_body.overlaps(other_body) {
                     result.touching_below = true;
                 }
             }
-            if actor_bounds.max.y < other_bounds.min.y && (actor_bounds.max.y + 1.0) > other_bounds.min.y {
-                test_body.set_pos(&(result.final_pos + Vec2::new(0.0, 1.0)));
+            if actor_bounds.max.y <= other_bounds.min.y && (actor_bounds.max.y + 1.0) >= other_bounds.min.y {
+                test_body.set_pos((result.final_pos + Vec2::new(0.0, 1.0)));
                 if test_body.overlaps(other_body) {
                     result.touching_above = true;
                 }
             }
-            if actor_bounds.min.x > other_bounds.max.x && (actor_bounds.min.x - 1.0) < other_bounds.max.x {
-                test_body.set_pos(&(result.final_pos + Vec2::new(-1.0, 0.0)));
+            if actor_bounds.min.x >= other_bounds.max.x && (actor_bounds.min.x - 1.0) <= other_bounds.max.x {
+                test_body.set_pos((result.final_pos + Vec2::new(-1.0, 0.0)));
                 if test_body.overlaps(other_body) {
                     result.touching_left = true;
                 }
             }
-            if actor_bounds.max.x < other_bounds.min.x && (actor_bounds.max.x + 1.0) > other_bounds.min.x {
-                test_body.set_pos(&(result.final_pos + Vec2::new(1.0, 0.0)));
+            if actor_bounds.max.x <= other_bounds.min.x && (actor_bounds.max.x + 1.0) >= other_bounds.min.x {
+                test_body.set_pos((result.final_pos + Vec2::new(1.0, 0.0)));
                 if test_body.overlaps(other_body) {
                     result.touching_right = true;
                 }

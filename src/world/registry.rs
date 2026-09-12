@@ -1,6 +1,6 @@
 use rustc_hash::{FxHashSet, FxHashMap};
-use vibarena::{Arena, ArenaMap, KeySet};
-use std::{any::TypeId, cell::OnceCell};
+use vibarena::{Arena, ArenaMap, Key, KeySet};
+use std::{any::TypeId, cell::OnceCell, num::NonZero};
 use crate::{TypedID, World, entity::ID};
 
 
@@ -97,6 +97,13 @@ impl Registry {
     pub fn get<T: 'static>(id: &ID<T>) -> Option<&(ID<T>,T)> {
         let entry = Self::get_map().get::<RegistryEntry<T>>().unwrap();
         entry.arena.get(id.index)
+    }
+
+    // gets first entity that matches type
+    pub fn get_first<T: 'static>() -> Option<&'static (ID<T>, T)> {
+        let entry = Self::get_map().get::<RegistryEntry<T>>()?;
+        let key = entry.entities.iter().next()?;
+        entry.arena.get(*key)
     }
 
     pub fn get_mut<T: 'static>(id: &ID<T>) -> Option<&mut (ID<T>,T)> {

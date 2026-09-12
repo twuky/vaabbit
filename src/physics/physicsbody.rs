@@ -2,7 +2,7 @@ use glam::Vec2;
 
 use crate::{TypedID, physics::HasBounds, shapes::{Collider, Shape}};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PhysicsClass {
     Actor,
     Solid,
@@ -50,13 +50,17 @@ impl PhysicsBody {
         self.body.as_mut()
     }
 
+    pub fn set_shape(&mut self, shape: Option<Collider>) {
+        self.body = shape;
+    }
+
     pub fn translate(&mut self, delta: &Vec2) {
-        self.set_pos(&{self.pos + *delta});
+        self.set_pos({self.pos + *delta});
     }
 
     pub fn set_origin(&mut self, origin: Vec2) {
         self.origin = origin;
-        self.set_pos(&{self.pos});
+        self.set_pos({self.pos});
     }
 
     /** 
@@ -90,11 +94,11 @@ impl PhysicsBody {
         self.set_origin(origin);
     }
 
-    pub fn set_pos(&mut self, pos: &Vec2) {
+    pub fn set_pos(&mut self, pos: Vec2) {
         if let Some(shape) = self.body.as_mut() {
-            shape.set_pos(*pos - self.origin);
+            shape.set_pos(pos - self.origin);
         }
-        self.pos = *pos;    
+        self.pos = pos;    
     }
 
     pub fn bounds(&self) -> crate::shapes::AABB {

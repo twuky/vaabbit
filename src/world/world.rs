@@ -102,8 +102,7 @@ impl World {
         // generate default physics body for type
         let mut body = T::init_physicsbody(typed_id);
         // updates internal posision of physics shape based on the actor's position
-        body.set_pos(&body.pos());
-
+        body.set_pos(body.pos());
 
         self.physics.add_body(&id, body);
 
@@ -127,6 +126,12 @@ impl World {
             world.physics.delete_body(&id);
             world.registry.recently_removed.insert(id.into_typed_id());
         });
+    }
+
+    pub fn remove_actors<T: Actor<P> + 'static, P: 'static>(&mut self, ids: &[ID<T>]) {
+        for id in ids {
+            self.remove_actor(id);
+        }
     }
 
     pub fn update_systems<P: 'static>(&mut self, ctx: &mut P) {
@@ -164,6 +169,20 @@ impl World {
 
     pub(crate) fn get_mut<'a, T: 'static>(&mut self, id: &'a ID<T>) -> Option<&'a mut T> {
         Some(&mut Registry::get_mut(id)?.1)
+    }
+
+    /**
+     * Gets the first entity ID of the given type
+     */
+    pub fn get_first_id<'a, T: 'static>(&self) -> Option<ID<T>> {
+        Registry::get_first::<T>().map(|(id, _)| *id)
+    }
+
+    /**
+     * Gets the first entity of the given type
+     */
+    pub fn get_first<'a, T: 'static>(&self) -> Option<&'a T> {
+        Registry::get_first::<T>().map(|(_, entity)| entity)
     }
 
     /**

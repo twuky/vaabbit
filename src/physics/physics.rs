@@ -156,14 +156,12 @@ impl Physics {
         let old_entry = entry.body_indices.insert(id.index, new_idx);
 
         bounds.expand(crate::physics::TREE_BOUNDS_PADDING);
-        
-        self.tree.insert(new_idx, &bounds);
-
         if let Some(old_idx) = old_entry {
             self.to_delete.insert(old_idx);
             self.physics_bodies.remove(old_idx);
         }
         
+        self.tree.insert(new_idx, &bounds);
     }
 
     pub fn delete_body<T: 'static>(&mut self, id: &ID<T>) {
