@@ -70,7 +70,7 @@ fn draw_node<T>(node: &Node<T>) {
     draw_text(&node.elements.len().to_string(), 100. + node.node_bounds.center().x, 100. + node.node_bounds.center().y, 16.0, c);
 
     for e in &node.elements {
-        draw_aabb(e.1, c)
+        //draw_aabb(e.1, c)
     }
 
     if let Some(children) = &node.children {

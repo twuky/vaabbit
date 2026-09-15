@@ -139,6 +139,14 @@ impl AABB {
     }
 
     #[inline(always)]
+    pub fn overlaps_point(&self, point: Vec2) -> bool {
+        point.x >= self.min.x && 
+        point.x <= self.max.x && 
+        point.y >= self.min.y && 
+        point.y <= self.max.y
+    }
+
+    #[inline(always)]
     pub fn inseam(&self) -> f32 {
         self.width() + self.height()
     }

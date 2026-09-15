@@ -8,7 +8,7 @@ const MAX_ELEMENTS: usize = 16;
 pub struct Node<T> {
     pub node_bounds: AABB,
     pub children: Option<Box<[Node<T>; 4]>>,
-    pub elements: SmallVec<[(T, AABB); 32]>,
+    pub elements: SmallVec<[(T, Vec2); 32]>,
 }
 
 impl<T> Node<T> where T: Copy {
@@ -30,7 +30,7 @@ impl<T> Node<T> where T: Copy {
         out.push((self.elements.len(), self.node_bounds));
     }
 
-    pub fn collect_all<'a>(&'a self, out: &mut SmallVec<[&'a (T, AABB); 32]>) {
+    pub fn collect_all<'a>(&'a self, out: &mut SmallVec<[&'a (T, Vec2); 32]>) {
         out.extend(&self.elements);
         if let Some(children) = &self.children {
             for child in children.iter() {
@@ -40,18 +40,18 @@ impl<T> Node<T> where T: Copy {
     }
 
     #[inline]
-    pub fn insert(&mut self, data: T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
+    pub fn insert(&mut self, data: T, point: Vec2, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         if let Some(children) = &mut self.children {
             for child in children.iter_mut() {
-                if bounds.is_within_aabb(child.node_bounds) {
-                    child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
+                if child.node_bounds.overlaps_point(point) {
+                    child.insert(data, point, (depth + 1, max_depth), should_rebalance);
                     return;
                 }
             };
         };
 
         // as a last resort, it is outside the tree, so this should be the root
-        self.elements.push((data, *bounds));
+        self.elements.push((data, point));
         if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
         }
@@ -79,8 +79,8 @@ impl<T> Node<T> where T: Copy {
         for el in to_replace {
             let mut inserted = false;
             for child in children.iter_mut() {
-                if el.1.is_within_aabb(child.node_bounds) {
-                    child.insert(el.0, &el.1, (d, max_depth), true);
+                if child.node_bounds.overlaps_point(el.1) {
+                    child.insert(el.0, el.1, (d, max_depth), true);
                     inserted = true;
                     break;
                 }
@@ -148,8 +148,8 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
         }
     }
 
-    pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, AABB); 32]> {
-        let mut out = SmallVec::<[&'a (T, AABB); 32]>::with_capacity(32);
+    pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, Vec2); 32]> {
+        let mut out = SmallVec::<[&'a (T, Vec2); 32]>::with_capacity(32);
 
         let stack = unsafe { &mut *self.query_stack.get() };
         unsafe {stack.set_len(0);}
@@ -177,7 +177,7 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
             }
 
             for e in &node.elements {
-                if bounds.overlaps_aabb(e.1) {
+                if bounds.overlaps_point(e.1) {
                     out.push(e);
                 }
             }
@@ -191,11 +191,17 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, &shape.bounds(), (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds().min, (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds().max, (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds().top_left(), (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds().top_right(), (0, self.max_depth), false);
     }
 
     pub fn insert_with_rebalance(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, &shape.bounds(), (0, self.max_depth), true);
+        self.root.insert(data, shape.bounds().min, (0, self.max_depth), true);
+        self.root.insert(data, shape.bounds().max, (0, self.max_depth), true);
+        self.root.insert(data, shape.bounds().top_left(), (0, self.max_depth), true);
+        self.root.insert(data, shape.bounds().top_right(), (0, self.max_depth), true);
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
