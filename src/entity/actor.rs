@@ -158,6 +158,10 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
         world.move_and_slide(*id, vector)
     }
 
+    fn set_z(&mut self, z: i32, world: &mut World) where Self: Sized {
+        world.set_z(world.current_actor.unwrap(), z);
+    }
+
     // Lifecycle hook: called when the actor enters a collision with another actor
     fn on_collision(&mut self, _id: &ID<Self>, _other: TypedID, _world: &mut World) {
         // user override
@@ -232,7 +236,7 @@ impl World {
         
         // perform broad phase collision
         let mut query = SmallVec::new();
-        self.physics.query_against_id(&bounds, &mut query, id.into_typed_id());
+        self.physics.query_against_id(bounds, &mut query, id.into_typed_id());
         
         for collided in query {
             // near phase collision
@@ -262,7 +266,7 @@ impl World {
         }
 
         let mut query = SmallVec::new();
-        self.physics.query_against_id(&bounds, &mut query, id.into_typed_id());
+        self.physics.query_against_id(bounds, &mut query, id.into_typed_id());
 
         let overlap_list = self.physics.get_overlap_list(&id);
         // new objects we are overlapping with after movement
@@ -329,7 +333,7 @@ impl World {
         query_bounds.expand(delta.abs().max_element() + 2.0);
 
         let mut query_results = SmallVec::new();
-        self.physics.query_against_id(&query_bounds, &mut query_results, id.into_typed_id());
+        self.physics.query_against_id(query_bounds, &mut query_results, id.into_typed_id());
 
         let currently_overlapping = self.physics.get_overlap_list(&id);
         // new objects we are overlapping with after movement

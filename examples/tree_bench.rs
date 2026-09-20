@@ -54,7 +54,7 @@ fn main() {
     // bench quadtree query time
     let t = std::time::Instant::now();
     for rect in &queries {
-        let res = quadtree.query(rect);
+        let res = quadtree.query(*rect);
         results_quadtree.push(res);
     }
     println!("quadtree query time: {}", t.elapsed().as_secs_f64());

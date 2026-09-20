@@ -40,7 +40,7 @@ impl<T> Node<T> where T: Copy {
     }
 
     #[inline]
-    pub fn insert(&mut self, data: T, bounds: &AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
+    pub fn insert(&mut self, data: T, bounds: AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
         if let Some(children) = &mut self.children {
             for child in children.iter_mut() {
                 if bounds.is_within_aabb(child.node_bounds) {
@@ -51,10 +51,23 @@ impl<T> Node<T> where T: Copy {
         };
 
         // as a last resort, it is outside the tree, so this should be the root
-        self.elements.push((data, *bounds));
+        self.elements.push((data, bounds));
         if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
         }
+    }
+
+    pub fn query_remove(&mut self, bounds: AABB, to_remove: &T) where T: PartialEq {
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                if bounds.is_within_aabb(child.node_bounds) {
+                    child.query_remove(bounds, to_remove);
+                    return;
+                }
+            };
+        };
+
+        self.elements.retain(|item| item.0 != *to_remove);
     }
 
     #[inline]
@@ -80,7 +93,7 @@ impl<T> Node<T> where T: Copy {
             let mut inserted = false;
             for child in children.iter_mut() {
                 if el.1.is_within_aabb(child.node_bounds) {
-                    child.insert(el.0, &el.1, (d, max_depth), true);
+                    child.insert(el.0, el.1, (d, max_depth), true);
                     inserted = true;
                     break;
                 }
@@ -148,7 +161,7 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
         }
     }
 
-    pub fn query<'a>(&'a self, bounds: &AABB) -> SmallVec<[&'a (T, AABB); 32]> {
+    pub fn query<'a>(&'a self, bounds: AABB) -> SmallVec<[&'a (T, AABB); 32]> {
         let mut out = SmallVec::<[&'a (T, AABB); 32]>::with_capacity(32);
 
         let stack = unsafe { &mut *self.query_stack.get() };
@@ -186,16 +199,20 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
         out
     }
 
+    pub fn query_remove(&mut self, bounds: AABB, to_remove: &T) where T: PartialEq {
+        self.root.query_remove(bounds, to_remove);
+    }
+
     pub fn len(&self) -> usize {
         self.root.get_total()
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, &shape.bounds(), (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds(), (0, self.max_depth), false);
     }
 
     pub fn insert_with_rebalance(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, &shape.bounds(), (0, self.max_depth), true);
+        self.root.insert(data, shape.bounds(), (0, self.max_depth), true);
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {

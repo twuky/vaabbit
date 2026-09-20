@@ -1,7 +1,7 @@
 use rustc_hash::{FxHashSet, FxHashMap};
 use vibarena::{Arena, ArenaMap, Key, KeySet};
-use std::{any::TypeId, cell::OnceCell, num::NonZero};
-use crate::{TypedID, World, entity::ID};
+use std::{any::TypeId, cell::OnceCell, default, num::NonZero};
+use crate::{TypedID, World, entity::{ID, TypedCollection}};
 
 
 pub(crate) struct RegistryEntry<T> {
@@ -20,22 +20,28 @@ impl<T: 'static> RegistryEntry<T> {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct EntityData {
+    pub is_enabled: TypedCollection<bool>,
+    pub z_index: TypedCollection<i32>,
+}
+
+#[derive(Debug, Default)]
 pub(crate) struct Registry {
+    pub data: EntityData,
     pub types: FxHashSet<TypeId>,
     pub recently_removed: FxHashSet<TypedID>,
 }
 
 static mut MAP: OnceCell<anymap::AnyMap> = OnceCell::new();
 
+
 impl Registry {
     pub fn new() -> Self {
         unsafe {
             MAP.get_or_init(|| {anymap::AnyMap::new()});
         }
-        Self {
-            types: FxHashSet::default(),
-            recently_removed: FxHashSet::default(),
-        }
+        Self {..Default::default()}
     }
 
     #[inline(always)]

@@ -89,6 +89,35 @@ impl World {
         self.physics.register_type::<T>();
     }
 
+    /// Sets the z-index of the given actor
+    pub fn set_z(&mut self, id: impl Into<TypedID>, z: i32) {
+        let id = id.into();
+        self.registry.data.z_index.insert(id, z);
+    }
+    /// Gets the z-index of the given actor
+    #[inline(always)]
+    pub fn get_z(&self, id: impl Into<TypedID>) -> Option<&i32> {
+        let id = id.into();
+        self.registry.data.z_index.get(id)
+    }
+
+    /// Checks if the given actor is enabled
+    #[inline(always)]
+    pub fn is_enabled(&self, id: impl Into<TypedID>) -> Option<&bool> {
+        let id = id.into();
+        self.registry.data.is_enabled.get(id)
+    }
+
+    pub fn disable_actor(&mut self, id: impl Into<TypedID>) {
+        let id = id.into();
+        self.registry.data.is_enabled.insert(id, false);
+    }
+
+    pub fn enable_actor(&mut self, id: impl Into<TypedID>) {
+        let id = id.into();
+        self.registry.data.is_enabled.insert(id, true);
+    }
+
     pub fn add_actor<T: Actor<P> + 'static, P: 'static>(&mut self, actor: T) -> ID<T> {
         let typeid = TypeId::of::<T>();
         if !self.registry.types.contains(&typeid) {
@@ -98,6 +127,9 @@ impl World {
 
         let id = Registry::insert_actor(actor);
         let typed_id = id.into_typed_id();
+
+        self.registry.data.is_enabled.insert(typed_id, true);
+        self.registry.data.z_index.insert(typed_id, 0);
 
         // generate default physics body for type
         let mut body = T::init_physicsbody(typed_id);
