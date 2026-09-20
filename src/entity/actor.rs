@@ -1,5 +1,5 @@
 use std::any::TypeId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use glam::Vec2;
 use smallvec::SmallVec;
 
@@ -274,13 +274,12 @@ impl World {
         // objects we are no longer overlapping with after movement
         let mut overlap_exits = SmallVec::<[TypedID; 6]>::with_capacity(6);
 
-        let mut query_set = Vec::<TypedID>::with_capacity(query.len());
+        let mut query_set = FxHashSet::<TypedID>::with_capacity_and_hasher(query.len(), FxBuildHasher::default());
 
         // lifecycle: collision start
         for collided in query {
-            if !query_set.contains(&collided.id) {
-                query_set.push(collided.id);
-            }
+            query_set.insert(collided.id);
+
             if overlap_list.contains(&collided.id) {
                 continue; 
             }
