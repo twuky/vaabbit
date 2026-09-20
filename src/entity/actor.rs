@@ -173,7 +173,7 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
     }
 
     // Returns a list of all actors that are currently colliding with this actor
-    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a FxHashSet<TypedID> {
+    fn get_colliding_bodies<'a>(&mut self, world: &'a World) -> &'a Vec<TypedID> {
         let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.physics.get_overlap_list(id)
     }
@@ -274,11 +274,13 @@ impl World {
         // objects we are no longer overlapping with after movement
         let mut overlap_exits = SmallVec::<[TypedID; 6]>::with_capacity(6);
 
-        let mut query_set = FxHashSet::<TypedID>::with_capacity_and_hasher(query.len(), Default::default());
+        let mut query_set = Vec::<TypedID>::with_capacity(query.len());
 
         // lifecycle: collision start
         for collided in query {
-            query_set.insert(collided.id);
+            if !query_set.contains(&collided.id) {
+                query_set.push(collided.id);
+            }
             if overlap_list.contains(&collided.id) {
                 continue; 
             }

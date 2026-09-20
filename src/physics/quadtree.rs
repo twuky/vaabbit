@@ -161,6 +161,44 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
         }
     }
 
+    pub fn query_items<'a>(&'a self, bounds: AABB) -> SmallVec<[T; 32]> where T: PartialEq, T: Copy {
+        let mut out = SmallVec::<[T; 32]>::with_capacity(32);
+
+        let stack = unsafe { &mut *self.query_stack.get() };
+        unsafe {stack.set_len(0);}
+        stack.push(&self.root as *const Node<T>);
+
+        let mut cursor = 0;
+
+        // cursor-BFS: the rest of the frontier is processed before a child is
+        // reached, so prefetching it on discovery hides the node-load latency.
+        while cursor < stack.len() {
+            let node: &'a Node<T> = unsafe { &*stack[cursor] };
+            cursor += 1;
+
+            if let Some(children) = &node.children {
+                for child in children.iter().take(4) {
+                    if bounds.overlaps_aabb(child.node_bounds) {
+                        #[cfg(target_arch = "x86_64")]
+                        unsafe {
+                            use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
+                            _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
+                        }
+                        stack.push(child as *const Node<T>);
+                    }
+                }
+            }
+
+            for e in &node.elements {
+                if bounds.overlaps_aabb(e.1) {
+                    out.push(e.0);
+                }
+            }
+        }
+
+        out
+    }
+
     pub fn query<'a>(&'a self, bounds: AABB) -> SmallVec<[&'a (T, AABB); 32]> {
         let mut out = SmallVec::<[&'a (T, AABB); 32]>::with_capacity(32);
 
