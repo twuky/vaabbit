@@ -149,19 +149,26 @@ impl Physics {
     #[inline(always)]
     pub fn update_body<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
         let mut bounds = body.bounds();
-        let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
+        self.tree.query_remove(body.bounds(), &id.index);
 
-        let new_idx = self.physics_bodies.insert(body);
-        
-        let old_entry = entry.body_indices.insert(id.index, new_idx);
+        let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
+        let key = entry.body_indices.get(&id.index).unwrap();
+        let update = self.physics_bodies.get_mut(*key).unwrap();
+        *update = body;
+
 
         bounds.expand(crate::physics::TREE_BOUNDS_PADDING);
-        if let Some(old_idx) = old_entry {
-            self.to_delete.insert(old_idx);
-            self.physics_bodies.remove(old_idx);
-        }
         
-        self.tree.insert(new_idx, &bounds);
+        self.tree.insert(*key, &bounds);
+    }
+
+    pub fn remove_body<T: 'static>(&mut self, id: &ID<T>) {
+        let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
+        let idx = entry.body_indices.get(&id.index).unwrap();
+        let body = self.physics_bodies.remove(*idx).unwrap();
+
+        self.tree.query_remove(body.bounds(), &id.index);
+
     }
 
     pub fn delete_body<T: 'static>(&mut self, id: &ID<T>) {
@@ -173,25 +180,30 @@ impl Physics {
     }
 
     pub fn cleanup(&mut self) {
-        self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 12); // quadtree
-        
         //we'll try to calculate the smallest bounds of all the bodies
         let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
 
         for id in &self.to_delete {
             self.physics_bodies.remove(*id);
         }
-        for (id, body) in self.physics_bodies.iter_keyed() {
+        for (_id, body) in self.physics_bodies.iter_keyed() {
             let bounds = body.bounds();
             min_bounds.min = min_bounds.min.min(bounds.min);
             min_bounds.max = min_bounds.max.max(bounds.max);
-
-            self.tree.insert_with_rebalance(id, &bounds);
         }
         self.to_delete.clear();
         min_bounds.min -= 32.0;
         min_bounds.max += 32.0;
-        self.tree_bounds = min_bounds;
+
+        if self.tree_bounds.area() > min_bounds.area() {
+            // println!("rebuilding tree, old bounds: {:?}, new bounds: {:?}", self.tree_bounds, min_bounds);
+            self.tree_bounds = min_bounds;
+            self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 12); // quadtree
+            for (id, body) in self.physics_bodies.iter_keyed() {
+                let bounds = body.bounds();
+                self.tree.insert_with_rebalance(id, &bounds);
+            }
+        }
 
         // println!("physics queries last frame: {}", queries);
         // println!("entities last frame: {}", self.physics_bodies.len());
@@ -199,7 +211,7 @@ impl Physics {
         self.queries_last_frame.replace(0);
     }
 
-    pub fn query<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>) {
+    pub fn query<'a>(&'a self, bounds: AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>) {
         let q = self.tree.query(bounds);
             for (idx, _aabb) in q {
             if self.to_delete.contains(idx) {continue}
@@ -212,7 +224,7 @@ impl Physics {
         *self.queries_last_frame.borrow_mut() += 1;
     }
 
-    pub fn query_filtered<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>, filter: impl Fn(&PhysicsBody) -> bool) {   
+    pub fn query_filtered<'a>(&'a self, bounds: AABB, out: &mut SmallVec<[&'a PhysicsBody; 4]>, filter: impl Fn(&PhysicsBody) -> bool) {   
         let q = self.tree.query(bounds);
 
         for (idx, _aabb) in q {
@@ -228,7 +240,7 @@ impl Physics {
         *self.queries_last_frame.borrow_mut() += 1;
     }
 
-    pub(crate) fn query_against_id<'a>(&'a self, bounds: &AABB, out: &mut SmallVec<[&'a PhysicsBody; 32]>, id: TypedID) {
+    pub(crate) fn query_against_id<'a>(&'a self, bounds: AABB, out: &mut SmallVec<[&'a PhysicsBody; 32]>, id: TypedID) {
         let q = self.tree.query(bounds);
 
         for (idx, _aabb) in q {
