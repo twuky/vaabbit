@@ -135,14 +135,7 @@ impl<T: 'static> ID<T> {
 
 impl<T> Clone for ID<T> {
     fn clone(&self) -> Self {
-        Self {
-            index: self.index,
-            _type: std::marker::PhantomData,
-        }
-    }
-
-    fn clone_from(&mut self, source: &Self) {
-        *self = *source
+        *self
     }
 }
 

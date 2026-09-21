@@ -55,12 +55,12 @@ impl PhysicsBody {
     }
 
     pub fn translate(&mut self, delta: &Vec2) {
-        self.set_pos({self.pos + *delta});
+        self.set_pos(self.pos + *delta);
     }
 
     pub fn set_origin(&mut self, origin: Vec2) {
         self.origin = origin;
-        self.set_pos({self.pos});
+        self.set_pos(self.pos);
     }
 
     /** 

@@ -1,4 +1,4 @@
-use std::any::{TypeId, type_name};
+use std::any::{TypeId};
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
@@ -206,7 +206,7 @@ impl World {
     /**
      * Gets the first entity ID of the given type
      */
-    pub fn get_first_id<'a, T: 'static>(&self) -> Option<ID<T>> {
+    pub fn get_first_id<T: 'static>(&self) -> Option<ID<T>> {
         Registry::get_first::<T>().map(|(id, _)| *id)
     }
 

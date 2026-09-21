@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap};
 
 use anymap::AnyMap;
 use glam::Vec2;
 use vibarena::{Arena, ArenaMap, Key, KeySet};
 use smallvec::SmallVec;
-use crate::{ID, TypedID, physics::{dynamictree::DynamicTree, quadtree::QuadTree}, shapes::AABB};
+use crate::{ID, TypedID, physics::{quadtree::QuadTree}, shapes::AABB};
 use crate::physics::physicsbody::PhysicsBody;
 
 pub struct PhyysicsEntry<T> {

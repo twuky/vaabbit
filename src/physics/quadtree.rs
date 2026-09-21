@@ -67,7 +67,7 @@ impl<T> Node<T> where T: Copy {
             };
         };
 
-        self.elements.retain(|item| item.0 != *to_remove);
+        self.elements.retain(|el| el.0 != *to_remove);
     }
 
     #[inline]
@@ -124,15 +124,15 @@ impl<T> Node<T> where T: Copy {
 
     pub fn get_total(&self) -> usize {
         let mut total = 0;
-        self.get_total_recursive(&mut total, 0);
+        self.get_total_recursive(&mut total);
         total
     }
 
-    fn get_total_recursive(&self, total: &mut usize, depth: u8) {
+    fn get_total_recursive(&self, total: &mut usize) {
         *total += self.elements.len();
         if let Some(children) = &self.children {
             for child in children.iter() {
-                child.get_total_recursive(total, depth + 1);
+                child.get_total_recursive(total);
             }
         }
     }
@@ -208,8 +208,6 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
 
         let mut cursor = 0;
 
-        // cursor-BFS: the rest of the frontier is processed before a child is
-        // reached, so prefetching it on discovery hides the node-load latency.
         while cursor < stack.len() {
             let node: &'a Node<T> = unsafe { &*stack[cursor] };
             cursor += 1;
@@ -217,11 +215,7 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
             if let Some(children) = &node.children {
                 for child in children.iter().take(4) {
                     if bounds.overlaps_aabb(child.node_bounds) {
-                        #[cfg(target_arch = "x86_64")]
-                        unsafe {
-                            use std::arch::x86_64::{_mm_prefetch, _MM_HINT_T0};
-                            _mm_prefetch::<_MM_HINT_T0>(child as *const Node<T> as *const i8);
-                        }
+                        
                         stack.push(child as *const Node<T>);
                     }
                 }
