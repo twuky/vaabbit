@@ -1,12 +1,15 @@
 use rustc_hash::{FxHashSet};
 use vibarena::{Arena, KeySet};
 use std::{any::TypeId, cell::OnceCell};
-use crate::{TypedID, World, entity::{ID, TypedCollection}};
-
+use crate::{TypedID, World,ID};
+use crate::collections::TypedCollection;
 
 pub(crate) struct RegistryEntry<T> {
     pub arena: Arena<(ID<T>,T)>,
     pub entities: KeySet,
+
+    pub z_index: Arena<i32>,
+    pub is_enabled: Arena<bool>,
 }
 
 impl<T: 'static> RegistryEntry<T> {
@@ -21,14 +24,7 @@ impl<T: 'static> RegistryEntry<T> {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct EntityData {
-    pub is_enabled: TypedCollection<bool>,
-    pub z_index: TypedCollection<i32>,
-}
-
-#[derive(Debug, Default)]
 pub(crate) struct Registry {
-    pub data: EntityData,
     pub types: FxHashSet<TypeId>,
     pub recently_removed: FxHashSet<TypedID>,
 }
@@ -59,7 +55,7 @@ impl Registry {
         unsafe {MAP.get_mut().unwrap_unchecked()}.get_mut::<RegistryEntry<T>>().unwrap()
     }
 
-    pub fn create_entry<T: 'static>() -> &'static mut RegistryEntry<T> {
+    pub fn register_type<T: 'static>() -> &'static mut RegistryEntry<T> {
         let &mut entry;
         let map = Self::get_map();
 
@@ -67,10 +63,14 @@ impl Registry {
             let arena = Arena::<(ID<T>,T)>::with_capacity(1024);
             let mut entities = KeySet::default();
             entities.reserve(1024);
+            let z_index = Arena::default();
+            let is_enabled = Arena::default();
 
             entry = RegistryEntry {
                 arena,
                 entities,
+                z_index,
+                is_enabled
             };
             
             map.insert(entry);
@@ -81,7 +81,7 @@ impl Registry {
 
 
     pub fn insert_actor<T: 'static>(entity: T) -> ID<T> {
-        let entry = Self::create_entry();
+        let entry = Self::register_type();
 
         let idx = entry.arena.insert_with_key(|idx| {
             (ID::new(idx), entity)
@@ -89,6 +89,11 @@ impl Registry {
 
         let id = ID::new(idx);
         entry.entities.insert(idx);
+        
+        let k = entry.z_index.insert(0);
+        assert!(k == idx);
+        let y = entry.is_enabled.insert(true);
+        assert!(y == idx);
 
         id
     }
@@ -97,6 +102,8 @@ impl Registry {
         let entry = Self::get_entry_mut::<T>();
         let entity = entry.arena.remove(id.index)?;
         entry.entities.remove(&id.index);
+        entry.z_index.remove(id.index);
+        entry.is_enabled.remove(id.index);
         Some(entity.1)
     }
 

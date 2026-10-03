@@ -5,43 +5,13 @@ use smallvec::SmallVec;
 
 use crate::{entity::{ID, TypedID}, physics::{PhysicsBody, PhysicsClass}, world::{Registry, World}};
 
-pub trait Draw<P: 'static> where Self: 'static, Self: Sized, Self: Actor<P> {
-    /// override this to disable drawing for your type, saving some performance
-    const DOES_NOT_DRAW: bool = false;
-
-    fn draw(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized {
-    }
-
-    fn get_z(&self, world: &mut World) -> i32 where Self: Sized { 0 }
-
-    fn draw_system(world: &mut World, ctx: &mut P) where Self: Sized {
-        if Self::DOES_NOT_DRAW { return; }
-        let registry_entry = &mut Registry::get_entry_mut::<Self>();
-
-        let mut z_indices = Vec::with_capacity(registry_entry.arena.len());
-
-        for actor in registry_entry.arena.iter_mut() {
-            let id = &actor.0;
-            if world.registry.recently_removed.contains(&id.into_typed_id()) {
-                println!("found in removed {:?}: {:?}", Self::type_name(), id);
-                return;
-            }
-            world.current_actor = Some(TypedID::from_id(*id));
-            z_indices.push(actor.1.get_z(world));
-        }
-
-        z_indices.sort();
-
-        for (_i, actor) in registry_entry.arena.iter_mut().enumerate() {
-            let id = &actor.0;
-            world.current_actor = Some(TypedID::from_id(*id));
-            actor.1.draw(id, world, ctx);
-        }
-    }
-}
-impl<P: 'static, T: Actor<P>> Draw<P> for T {}
 pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
+    /// override this to disable drawing for your type, saving some performance
+    const CFG_DOES_NOT_DRAW: bool = false;
+
     fn update(&mut self, id: &ID<Self>, world: &mut World, ctx: &mut P) where Self: Sized;
+
+    fn draw(&mut self, id: &ID<Self>, body: &PhysicsBody, world: &mut World, ctx: &mut P) where Self: Sized {}
 
     #[inline]
     // Allows you to specify a default physics body for your actor when it is initialized
@@ -159,7 +129,8 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
     }
 
     fn set_z(&mut self, z: i32, world: &mut World) where Self: Sized {
-        world.set_z(world.current_actor.unwrap(), z);
+        let id = ID::<Self>::from_typed_id(world.current_actor.unwrap());
+        world.set_z(id, z);
     }
 
     // Lifecycle hook: called when the actor enters a collision with another actor

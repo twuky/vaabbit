@@ -1,6 +1,7 @@
 {
     "scripts": {
         "bench-platformer": "samply record cargo run --example platformer -- --dev",
-        "bench-collision": "samply record cargo run --example collision_bench -- --dev"
+        "bench-collision": "samply record cargo run --example collision_bench -- --dev",
+        "bench-render": "samply record cargo run --example custom_draw -- --dev"
     }
 }

@@ -4,16 +4,16 @@ use rustc_hash::{FxHashMap};
 
 use anymap::AnyMap;
 use glam::Vec2;
-use vibarena::{Arena, ArenaMap, Key, KeySet};
+use vibarena::{Arena, Key, KeySet};
 use smallvec::SmallVec;
 use crate::{ID, TypedID, physics::{quadtree::QuadTree}, shapes::AABB};
 use crate::physics::physicsbody::PhysicsBody;
 
 pub struct PhyysicsEntry<T> {
     // source of truth for each body's index in the physics_bodies slotmap
-    pub body_indices: ArenaMap<Key>,
+    pub body_indices: Arena<Key>,
     // each body maintains a list of current overlaps
-    pub overlap_list: ArenaMap<Vec<TypedID>>,
+    pub overlap_list: Arena<Vec<TypedID>>,
 
     pub _type: std::marker::PhantomData<T>,
 }
@@ -54,14 +54,14 @@ impl Physics {
 
     pub fn get_overlap_list<T: 'static>(&self, id: &ID<T>) -> &Vec<TypedID> {
         let entry = self.entities.get::<PhyysicsEntry<T>>().unwrap();
-        let overlap_list = entry.overlap_list.get(&id.index).unwrap();
+        let overlap_list = entry.overlap_list.get(id.index).unwrap();
         overlap_list
     }
 
     pub fn update_overlap_list<T: 'static>(&mut self, id: &ID<T>, overlap_list: &[TypedID], exit_list: &[TypedID]) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
         // only add items that are not already in the list
-        let list = entry.overlap_list.get_mut(&id.index).unwrap();
+        let list = entry.overlap_list.get_mut(id.index).unwrap();
         
         for item in overlap_list {
             if !list.contains(item) {
@@ -92,8 +92,8 @@ impl Physics {
 
     pub(crate) fn register_type<T: 'static>(&mut self) {
         self.entities.insert::<PhyysicsEntry<T>>( PhyysicsEntry { 
-            body_indices: ArenaMap::default(),
-            overlap_list: ArenaMap::default(),
+            body_indices: Arena::default(),
+            overlap_list: Arena::default(),
             _type: std::marker::PhantomData 
         });
     }
@@ -101,7 +101,7 @@ impl Physics {
     #[inline(always)]
     pub fn idx_of<T: 'static>(&self, id: &ID<T>) -> Option<Key> {
         let entry = self.entities.get::<PhyysicsEntry<T>>().unwrap();
-        entry.body_indices.get(&id.index).cloned()
+        entry.body_indices.get(id.index).cloned()
     }
 
     pub fn add_body<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
@@ -112,8 +112,8 @@ impl Physics {
         bounds.expand(crate::physics::TREE_BOUNDS_PADDING);
         
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        let _ = entry.body_indices.insert(id.index, idx);
-        let _ = entry.overlap_list.insert(id.index, Vec::default());
+        let _ = entry.body_indices.insert(idx);
+        let _ = entry.overlap_list.insert(Vec::default());
 
         self.tree.insert(idx, &bounds);
     }
@@ -121,7 +121,7 @@ impl Physics {
     #[inline(always)]
     pub fn get_body<T: 'static>(&self, id: &ID<T>) -> Option<&PhysicsBody> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(&id.index)?;
+        let idx = entry.body_indices.get(id.index)?;
 
         self.physics_bodies.get(*idx)
     }
@@ -129,21 +129,21 @@ impl Physics {
     #[inline(always)]
     pub fn get_body_pos<T: 'static>(&self, id: &ID<T>) -> Option<Vec2> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(&id.index)?;
+        let idx = entry.body_indices.get(id.index)?;
         Some(self.physics_bodies.get(*idx)?.pos())
     }
 
     #[inline(always)]
     pub fn get_body_mut<T: 'static>(&mut self, id: &ID<T>) -> Option<&mut PhysicsBody> {
         let entry = self.entities.get::<PhyysicsEntry<T>>()?;
-        let idx = entry.body_indices.get(&id.index)?;
+        let idx = entry.body_indices.get(id.index)?;
         self.physics_bodies.get_mut(*idx)
     }
 
     #[inline(always)]
     pub fn update_body_in_place<T: 'static>(&mut self, id: &ID<T>, body: PhysicsBody) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        let idx = entry.body_indices.get(&id.index).unwrap();
+        let idx = entry.body_indices.get(id.index).unwrap();
         *self.physics_bodies.get_mut(*idx).unwrap() = body; 
     }
     
@@ -154,42 +154,45 @@ impl Physics {
 
         let new_idx = self.physics_bodies.insert(body);
         
-        let old_entry = entry.body_indices.insert(id.index, new_idx);
+        let old_entry = entry.body_indices.get_mut(id.index);
 
         bounds.expand(crate::physics::TREE_BOUNDS_PADDING);
         if let Some(old_idx) = old_entry {
-            self.to_delete.insert(old_idx);
-            self.physics_bodies.remove(old_idx);
+            self.to_delete.insert(*old_idx);
+            self.physics_bodies.remove(*old_idx);
+            *old_idx = new_idx;
         }
         
         self.tree.insert(new_idx, &bounds);
     }
 
-    pub fn delete_body<T: 'static>(&mut self, id: &ID<T>) {
+    pub fn remove_body<T: 'static>(&mut self, id: &ID<T>) {
         let entry = self.entities.get_mut::<PhyysicsEntry<T>>().unwrap();
-        let idx = entry.body_indices.remove(&id.index).unwrap();
+        let idx = entry.body_indices.remove(id.index).unwrap();
+        entry.overlap_list.remove(id.index);
 
         self.physics_bodies.remove(idx);
         self.to_delete.insert(idx);
     }
 
     pub fn cleanup(&mut self) {
+        self.tree.drop();
         self.tree = QuadTree::new(self.tree_bounds.width(), self.tree_bounds.height(), 12); // quadtree
         
         //we'll try to calculate the smallest bounds of all the bodies
         let mut min_bounds = AABB { min: Vec2::ZERO, max: Vec2::ZERO };
+        let mut bounds;
 
-        for id in &self.to_delete {
-            self.physics_bodies.remove(*id);
+        for id in self.to_delete.drain() {
+            self.physics_bodies.remove(id);
         }
         for (id, body) in self.physics_bodies.iter_keyed() {
-            let bounds = body.bounds();
-            min_bounds.min = min_bounds.min.min(bounds.min);
-            min_bounds.max = min_bounds.max.max(bounds.max);
+            bounds = body.bounds();
+            // recalculate size of the tree
+            min_bounds = min_bounds.union(bounds);
 
             self.tree.insert_with_rebalance(id, &bounds);
         }
-        self.to_delete.clear();
         min_bounds.min -= 32.0;
         min_bounds.max += 32.0;
         self.tree_bounds = min_bounds;

@@ -9,13 +9,15 @@ use crate::TypedID;
 use crate::events::{EventBus, EventQueue};
 use crate::physics::{Physics};
 use crate::shapes::AABB;
-use crate::entity::{Actor, Draw, ID};
+use crate::entity::{Actor, ID};
 use crate::world::registry::Registry;
+use crate::render::{Draw, Renderer};
+
 pub struct World {
     pub(crate) registry: Registry,
+    pub(crate) renderer: Renderer,
     pub logic_update: Duration,
     update_methods_any: AnyMap,
-    draw_methods_any: AnyMap,
 
     event_bus: RefCell<EventBus>,
 
@@ -36,8 +38,8 @@ impl World {
     pub fn new() -> Self {
         Self {
             registry: Registry::new(),
+            renderer: Renderer::default(),
             update_methods_any: AnyMap::new(),
-            draw_methods_any: AnyMap::new(),
             logic_update: Duration::from_millis(16),
             physics: Physics::new(AABB { min: vec2(-2048.0, -2048.0), max: vec2(2048.0, 2048.0) }),
             event_bus: RefCell::new(EventBus::new()),
@@ -78,44 +80,41 @@ impl World {
         if !self.update_methods_any.contains::<Vec<fn(&mut World, &mut P)>>() {
             let update_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
             self.update_methods_any.insert(update_methods);
-            let draw_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
-            self.draw_methods_any.insert(draw_methods);
         }
-
         self.update_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>().unwrap().push(T::update_system);
-        self.draw_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>().unwrap().push(T::draw_system);
 
-        Registry::create_entry::<T>();
+        Registry::register_type::<T>();
         self.physics.register_type::<T>();
+        self.renderer.register_type::<T, P>();
     }
 
     /// Sets the z-index of the given actor
-    pub fn set_z(&mut self, id: impl Into<TypedID>, z: i32) {
-        let id = id.into();
-        self.registry.data.z_index.insert(id, z);
+    pub fn set_z<T: Actor<P> + 'static, P: 'static>(&mut self, id: ID<T>, new_z: i32) {
+        let z = Registry::get_entry_mut::<T>().z_index.get_mut(id.index).unwrap();
+        if *z == new_z { return; }
+        let old_z = *z;
+        *z = new_z;
+        self.renderer.update_z(new_z, id, old_z);
     }
+
     /// Gets the z-index of the given actor
     #[inline(always)]
-    pub fn get_z(&self, id: impl Into<TypedID>) -> Option<&i32> {
-        let id = id.into();
-        self.registry.data.z_index.get(id)
+    pub fn get_z<T: Actor<P> + 'static, P: 'static>(&self, id: ID<T>) -> Option<&i32> {
+        Registry::get_entry::<T>().z_index.get(id.index)
     }
 
     /// Checks if the given actor is enabled
     #[inline(always)]
-    pub fn is_enabled(&self, id: impl Into<TypedID>) -> Option<&bool> {
-        let id = id.into();
-        self.registry.data.is_enabled.get(id)
+    pub fn is_enabled<T: Actor<P> + 'static, P: 'static>(&self, id: ID<T>) -> Option<&bool> {
+        Registry::get_entry::<T>().is_enabled.get(id.index)
     }
 
-    pub fn disable_actor(&mut self, id: impl Into<TypedID>) {
-        let id = id.into();
-        self.registry.data.is_enabled.insert(id, false);
+    pub fn disable_actor<T: Actor<P> + 'static, P: 'static>(&self, id: ID<T>) {
+        *Registry::get_entry_mut::<T>().is_enabled.get_mut(id.index).unwrap() = false;
     }
 
-    pub fn enable_actor(&mut self, id: impl Into<TypedID>) {
-        let id = id.into();
-        self.registry.data.is_enabled.insert(id, true);
+    pub fn enable_actor<T: Actor<P> + 'static, P: 'static>(&self, id: ID<T>) {
+        *Registry::get_entry_mut::<T>().is_enabled.get_mut(id.index).unwrap() = true;
     }
 
     pub fn add_actor<T: Actor<P> + 'static, P: 'static>(&mut self, actor: T) -> ID<T> {
@@ -128,13 +127,11 @@ impl World {
         let id = Registry::insert_actor(actor);
         let typed_id = id.into_typed_id();
 
-        self.registry.data.is_enabled.insert(typed_id, true);
-        self.registry.data.z_index.insert(typed_id, 0);
-
         // generate default physics body for type
         let mut body = T::init_physicsbody(typed_id);
         // updates internal posision of physics shape based on the actor's position
         body.set_pos(body.pos());
+        self.renderer.add_actor(id);
 
         self.physics.add_body(&id, body);
 
@@ -155,7 +152,8 @@ impl World {
             Registry::remove_actor(&id);
 
             // remove from physics
-            world.physics.delete_body(&id);
+            world.physics.remove_body(&id);
+            
             world.registry.recently_removed.insert(id.into_typed_id());
         });
     }
@@ -177,16 +175,20 @@ impl World {
             println!("WARNING: no update methods registered for the generic type {:?}", std::any::type_name::<P>());
             panic!("Please make sure the argument passed into update_systems(), \"{}\",is the same as the generic type of the actor structs", std::any::type_name::<P>());
         }
-
-        if let Some(systems) = self.draw_methods_any.get_mut::<Vec<fn(&mut World, &mut P)>>() {
-            for system in systems.clone() {
-                system(self, ctx);
-            }
-        }
-
         self.physics.cleanup();
         self.registry.recently_removed.clear();
         self.logic_update = time.elapsed();
+    }
+
+    pub fn draw_systems<P: 'static>(&mut self, ctx: &mut P) {
+        let draw_methods = self.renderer.get_draw_methods::<P>().unwrap().clone();
+        let layers = self.renderer.layers.clone();
+
+        for layer in layers.iter_values() {
+            for draw in &draw_methods {
+                draw(self, ctx, *layer);
+            }
+        }
     }
 
     /**

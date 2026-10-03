@@ -40,11 +40,11 @@ impl<T> Node<T> where T: Copy {
     }
 
     #[inline]
-    pub fn insert(&mut self, data: T, bounds: AABB, (depth, max_depth): (u8, u8), should_rebalance: bool) {
+    pub fn insert(&mut self, data: T, bounds: AABB, (depth, max_depth): (u8, u8)) {
         if let Some(children) = &mut self.children {
             for child in children.iter_mut() {
                 if bounds.is_within_aabb(child.node_bounds) {
-                    child.insert(data, bounds, (depth + 1, max_depth), should_rebalance);
+                    child.insert(data, bounds, (depth + 1, max_depth));
                     return;
                 }
             };
@@ -52,7 +52,22 @@ impl<T> Node<T> where T: Copy {
 
         // as a last resort, it is outside the tree, so this should be the root
         self.elements.push((data, bounds));
-        if should_rebalance && self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
+    }
+
+     #[inline]
+    pub fn insert_with_rebalance(&mut self, data: T, bounds: AABB, (depth, max_depth): (u8, u8)) {
+        if let Some(children) = &mut self.children {
+            for child in children.iter_mut() {
+                if bounds.is_within_aabb(child.node_bounds) {
+                    child.insert_with_rebalance(data, bounds, (depth + 1, max_depth));
+                    return;
+                }
+            };
+        };
+
+        // as a last resort, it is outside the tree, so this should be the root
+        self.elements.push((data, bounds));
+        if self.children.is_none() && self.elements.len() > MAX_ELEMENTS && depth < max_depth  {
             self.rebalance((depth, max_depth));
         }
     }
@@ -93,7 +108,7 @@ impl<T> Node<T> where T: Copy {
             let mut inserted = false;
             for child in children.iter_mut() {
                 if el.1.is_within_aabb(child.node_bounds) {
-                    child.insert(el.0, el.1, (d, max_depth), true);
+                    child.insert_with_rebalance(el.0, el.1, (d, max_depth));
                     inserted = true;
                     break;
                 }
@@ -136,8 +151,19 @@ impl<T> Node<T> where T: Copy {
             }
         }
     }
-}
 
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            self.elements.set_len(0);
+            if let Some(children) = &mut self.children {
+                for child in children.iter_mut() {
+                    child.drop();
+                }
+            }
+        }
+    }
+}
 pub struct QuadTree<T> {
     pub root: Node<T>,
     max_depth: u8,
@@ -240,11 +266,11 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
     }
 
     pub fn insert(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, shape.bounds(), (0, self.max_depth), false);
+        self.root.insert(data, shape.bounds(), (0, self.max_depth));
     }
 
     pub fn insert_with_rebalance(&mut self, data: T, shape: &impl shapes::Shape) {
-        self.root.insert(data, shape.bounds(), (0, self.max_depth), true);
+        self.root.insert_with_rebalance(data, shape.bounds(), (0, self.max_depth));
     }
 
     pub fn remove_all(&mut self, to_remove: &mut Vec<Option<T>>) where T: PartialEq {
@@ -256,5 +282,9 @@ impl<T: Clone> QuadTree<T> where T: Clone, T: Copy {
         let mut out = Vec::with_capacity(1024);
         self.root.get_debug_info(&mut out);
         out
+    }
+
+    pub(crate) fn drop(&mut self) {
+        self.root.drop();
     }
 }

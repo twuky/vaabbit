@@ -132,7 +132,7 @@ impl Actor<Vibbit> for Player {
 pub fn main() {
     let mut world = vaabbit::world::World::new();
     let mut vib = Vibbit::new(1280, 720, "context_state");
-    vib.cfg.set_target_fps(60.0);
+    vib.cfg.target_fps(60.0);
 
     let p_id = world.add_actor(Player {vel: 0.0});
     let g_id = world.add_actor(Ground {});

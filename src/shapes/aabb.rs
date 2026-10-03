@@ -100,23 +100,6 @@ impl AABB {
 
     #[inline(always)]
     pub fn union(self, other: AABB) -> Self {
-        #[cfg(target_arch = "x86_64")] {
-            use std::arch::x86_64::*;
-            unsafe {
-                // #[repr(C)] AABB is exactly [min.x, min.y, max.x, max.y], so load
-                // each as one unaligned 128-bit vector (no scalar gather).
-                let a = _mm_loadu_ps(&self  as *const AABB as *const f32);
-                let b = _mm_loadu_ps(&other as *const AABB as *const f32);
-                let lo = _mm_min_ps(a, b);  // correct for lanes 0,1 (min components)
-                let hi = _mm_max_ps(a, b);  // correct for lanes 2,3 (max components)
-                // want [lo[0], lo[1], hi[2], hi[3]]; the compiler folds this to a movsd merge
-                let r = _mm_shuffle_ps(lo, hi, 0b11100100);
-                let mut out = std::mem::MaybeUninit::<AABB>::uninit();
-                _mm_storeu_ps(out.as_mut_ptr() as *mut f32, r);
-                out.assume_init()
-            }
-        }
-        #[cfg(not(target_arch = "x86_64"))]
         Self {
             min: self.min.min(other.min),
             max: self.max.max(other.max),

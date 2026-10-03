@@ -42,13 +42,13 @@ impl Actor<()> for Rect {
 
 fn main() {
     let mut vib = Vibbit::new(1280, 720, "bunnymark");
-    vib.cfg.set_target_fps(0.0);
+    vib.cfg.target_fps(0.0);
     vib.cfg.window_show_fps(true);
     let mut world = vaabbit::world::World::new();
 
     let offset = glam::Vec2::new(-640.0, -360.0);
 
-    for _ in 0..1000 {
+    for _ in 0..500 {
         let id = world.add_actor(Rect::new());
         world.set_pos(id, vib.rand_vec2(0.0..1280.0 - BLOCK_SIZE, 0.0..720.0 - BLOCK_SIZE));
     }
