@@ -114,7 +114,7 @@ impl Actor<Vibbit> for Player {
         let results = self.move_and_slide(&dir, world);
 
         // are we grounded?
-        if results.touching_below && self.vel <= 0.0 {
+        if results.touching_below() && self.vel <= 0.0 {
             self.vel = 0.0;
         } else {
             // apply gravity
@@ -124,7 +124,7 @@ impl Actor<Vibbit> for Player {
 
         // draw
         let body = world.get_physics_body(&id).unwrap();
-        let color = if results.touching_below { vibbit::Color::new(200,255,200,255) } else { vibbit::Color::new(200,200,255,255) };
+        let color = if results.touching_below() { vibbit::Color::new(200,255,200,255) } else { vibbit::Color::new(200,200,255,255) };
         vib.draw_rect(body.pos(), 10.0, 10.0, color);
     }
 }

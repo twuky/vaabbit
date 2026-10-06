@@ -27,7 +27,7 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
         for actor in arena.iter_mut() {
             let id = &actor.0;
             if world.registry.recently_removed.contains(&id.into_typed_id()) {
-                println!("found in removed {:?}: {:?}", Self::type_name(), id);
+                //println!("found in removed {:?}: {:?}", Self::type_name(), id);
                 continue;
             }
             world.current_actor = Some(TypedID::from_id(actor.0));

@@ -76,7 +76,7 @@ impl World {
 
     pub(crate) fn register_type<T: Actor<P> + 'static, P: 'static>(&mut self) {
         //self.update_methods.push(T::update_system);
-        println!("INFO: registering update<{:?}> for {:?}", std::any::type_name::<P>(), std::any::type_name::<T>());
+        //println!("INFO: registering update<{:?}> for {:?}", std::any::type_name::<P>(), std::any::type_name::<T>());
         if !self.update_methods_any.contains::<Vec<fn(&mut World, &mut P)>>() {
             let update_methods: Vec<fn(&mut World, &mut P)> = Vec::with_capacity(32);
             self.update_methods_any.insert(update_methods);
@@ -172,7 +172,7 @@ impl World {
                 system(self, ctx);
             }
         } else {
-            println!("WARNING: no update methods registered for the generic type {:?}", std::any::type_name::<P>());
+            //println!("WARNING: no update methods registered for the generic type {:?}", std::any::type_name::<P>());
             panic!("Please make sure the argument passed into update_systems(), \"{}\",is the same as the generic type of the actor structs", std::any::type_name::<P>());
         }
         self.physics.cleanup();
@@ -230,8 +230,8 @@ impl World {
                 world.current_actor = Some(TypedID::from_id(id));
                 f(&mut entity.1);
             } else {
-                println!("with(entity) not found: {:?}", id.clone());
-                println!("perhaps already in use?");
+                //println!("with(entity) not found: {:?}", id.clone());
+                //println!("perhaps already in use?");
             }
         };
 
@@ -253,8 +253,8 @@ impl World {
                 if world.registry.recently_removed.contains(&id.into_typed_id()) {
                     return; // skip error message
                 }
-                println!("with_world(entity) not found: {:?}", id.clone());
-                println!("perhaps already in use?");
+                //println!("with_world(entity) not found: {:?}", id.clone());
+                //println!("perhaps already in use?");
             }
         };
 
