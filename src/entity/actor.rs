@@ -111,7 +111,7 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
     }
     #[inline(always)]
     // Sets the position of the actor in the game world
-    fn set_pos(&mut self, pos: Vec2, world: &'static mut World) where Self:Sized {
+    fn set_pos(&mut self, pos: Vec2, world: &mut World) where Self:Sized {
         let id = &ID::<Self>::from_typed_id(world.current_actor.unwrap());
         world.set_pos(*id, pos);
     }
@@ -168,10 +168,25 @@ pub trait Actor<P: 'static>where Self: 'static, Self: Sized {
 pub struct MovementResults {
     pub final_pos: Vec2,
 
-    pub touching_below: bool,
-    pub touching_above: bool,
-    pub touching_left: bool,
-    pub touching_right: bool,
+    pub touching_below: Option<TypedID>,
+    pub touching_above: Option<TypedID>,
+    pub touching_left: Option<TypedID>,
+    pub touching_right: Option<TypedID>,
+}
+
+impl MovementResults {
+    pub fn touching_below(&self) -> bool {
+        self.touching_below.is_some()
+    }
+    pub fn touching_above(&self) -> bool {
+        self.touching_above.is_some()
+    }
+    pub fn touching_left(&self) -> bool {
+        self.touching_left.is_some()
+    }
+    pub fn touching_right(&self) -> bool {
+        self.touching_right.is_some()
+    }
 }
 
 impl World {
@@ -356,10 +371,10 @@ impl World {
 
         let mut result = MovementResults {
             final_pos: final_body.pos(),
-            touching_below: false,
-            touching_above: false,
-            touching_left: false,
-            touching_right: false,
+            touching_below: None,
+            touching_above: None,
+            touching_left: None,
+            touching_right: None,
         };
 
         let actor_bounds = final_body.bounds();
@@ -372,25 +387,25 @@ impl World {
             if actor_bounds.min.y >= other_bounds.max.y && (actor_bounds.min.y - 1.0) <= other_bounds.max.y {
                 test_body.set_pos(result.final_pos + Vec2::new(0.0, -1.0));
                 if test_body.overlaps(other_body) {
-                    result.touching_below = true;
+                    result.touching_below = Some(other_body.id);
                 }
             }
             if actor_bounds.max.y <= other_bounds.min.y && (actor_bounds.max.y + 1.0) >= other_bounds.min.y {
                 test_body.set_pos(result.final_pos + Vec2::new(0.0, 1.0));
                 if test_body.overlaps(other_body) {
-                    result.touching_above = true;
+                    result.touching_above = Some(other_body.id);
                 }
             }
             if actor_bounds.min.x >= other_bounds.max.x && (actor_bounds.min.x - 1.0) <= other_bounds.max.x {
                 test_body.set_pos(result.final_pos + Vec2::new(-1.0, 0.0));
                 if test_body.overlaps(other_body) {
-                    result.touching_left = true;
+                    result.touching_left = Some(other_body.id);
                 }
             }
             if actor_bounds.max.x <= other_bounds.min.x && (actor_bounds.max.x + 1.0) >= other_bounds.min.x {
                 test_body.set_pos(result.final_pos + Vec2::new(1.0, 0.0));
                 if test_body.overlaps(other_body) {
-                    result.touching_right = true;
+                    result.touching_right = Some(other_body.id);
                 }
             }
         }

@@ -13,7 +13,11 @@ pub trait Draw<P: 'static> where Self: 'static, Self: Sized, Self: Actor<P> {
             let actors: Vec<ID<Self>> = actors.iter().cloned().collect();
 
             for id in actors {
-                if !*entry.is_enabled.get(id.index).unwrap() {
+                let disabled = entry.is_enabled.get(id.index);
+                if disabled.is_none() {
+                    continue;
+                }
+                if !*&disabled.unwrap() {
                     continue;
                 }
                 let body = unsafe {std::ptr::read(world.physics.get_body(&id).unwrap_unchecked())};
